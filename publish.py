@@ -24,7 +24,7 @@ def run_cmd(cmd: list) -> None:
     subprocess.run(cmd, check=True)
 
 
-def update_version(file: pathlib.Path, key: str, new_ver: str) -> str:
+def update_version(file: pathlib.Path, key: str, new_ver: str):
     """通用：更新文件中指定的版本字段（合并所有重复的文件修改逻辑）"""
     content = file.read_text("utf-8")
     # 正则匹配：key = "xxx"
@@ -38,8 +38,6 @@ def update_version(file: pathlib.Path, key: str, new_ver: str) -> str:
         raise ValueError(f"未找到字段：{key}")
     
     file.write_text(new_content, "utf-8")
-    # 返回旧版本号
-    return re.search(rf'{key}\s*=\s*"([^"]+)"', content).group(1)
 
 
 def get_current_version() -> str:
@@ -82,9 +80,9 @@ def main() -> int:
             return 2
 
         # 更新两个文件的版本号
-        old_pyproj = update_version(PYPROJECT_PATH, "version", new_ver)
-        old_init = update_version(INIT_PATH, "__version__", new_ver)
-        print(f"版本更新完成：{old_pyproj} → {new_ver}")
+        update_version(PYPROJECT_PATH, "version", new_ver)
+        update_version(INIT_PATH, "__version__", new_ver)
+        print(f"版本更新完成：{current_ver} → {new_ver}")
 
         # Git 自动化流程
         run_cmd(["git", "add", "."])
