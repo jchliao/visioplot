@@ -1,6 +1,7 @@
 [project]
 name = "visioplot"
-version = "1.0.7"
+version = "1.0.8"
+
 
 
 description = "Matplotlib to editable SVG and Visio (VSDX) export toolkit"
