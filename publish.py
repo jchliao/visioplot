@@ -51,8 +51,7 @@ def bump_pyproject_version(pyproject_path: pathlib.Path, new_version: str) -> st
                 old_version = m.group(2)
                 prefix = m.group(1)
                 suffix = m.group(3)
-                newline = "\n" if line.endswith("\n") else ""
-                lines[i] = f'{prefix}"{new_version}"{suffix}{newline}'
+                lines[i] = f'{prefix}"{new_version}"{suffix}'
                 pyproject_path.write_text("".join(lines), encoding="utf-8")
                 return old_version
 
@@ -100,8 +99,7 @@ def bump_init_version(init_path: pathlib.Path, new_version: str) -> str:
             old_version = m.group(2)
             prefix = m.group(1)
             suffix = m.group(3)
-            newline = "\n" if line.endswith("\n") else ""
-            lines[i] = f'{prefix}"{new_version}"{suffix}{newline}'
+            lines[i] = f'{prefix}"{new_version}"{suffix}'
             init_path.write_text("".join(lines), encoding="utf-8")
             return old_version
 
