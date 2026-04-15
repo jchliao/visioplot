@@ -46,10 +46,12 @@ vp.apply_style()
 
 ```python
 import matplotlib.pyplot as plt
+import mpl_toolkits.axisartist as AA
 import visioplot as vp
 
 vp.apply_style()
-
+plt.figure(figsize=vp.cm(9, 6.75))
+plt.axes(axes_class=AA.Axes)
 plt.plot([1, 2, 3], [3, 5, 4], label="inax", marker="s")
 plt.plot([1, 2, 3], [5, 15, 3], gid="out", label="outax", linestyle="--", marker="o")
 plt.legend()
@@ -86,8 +88,8 @@ vp.apply_style()
 plt.plot([1, 2, 3], [3, 5, 4], label="inax", marker="s")
 plt.plot([1, 2, 3], [5, 15, 3], gid="out", label="outax", linestyle="--", marker="o")
 plt.legend()
-
-exporter = vp.savefig("demo.svg")
+plt.tight_layout()
+exporter = vp.savefig("demo.svg", bbox_inches="tight", pad_inches=0)
 exporter.tovsd()   # 保存为 demo.vsdx
 exporter.toclip()  # 导出并复制到剪贴板
 ```
