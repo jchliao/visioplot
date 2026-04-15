@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import matplotlib_inline
-from contextlib import contextmanager
 
 DEFAULT_STYLE = {
     "font.family": ["Times New Roman", "SimSun"],
@@ -22,16 +21,6 @@ def apply_style(style=None, *, inline_svg=True):
 def reset_style():
     """Restore matplotlib defaults."""
     plt.rcdefaults()
-
-
-@contextmanager
-def style_context(style=None, *, inline_svg=True):
-    """Temporarily apply style in a context manager."""
-    with plt.rc_context(DEFAULT_STYLE if style is None else style):
-        if inline_svg:
-            matplotlib_inline.backend_inline.set_matplotlib_formats("svg")
-        yield
-
 
 def cm(*args):
     return tuple(x / 2.54 for x in args)

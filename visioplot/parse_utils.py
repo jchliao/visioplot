@@ -1,9 +1,13 @@
 import re
 
+from visioplot.debug_utils import debug_print
+
 
 visPosNormal = 0
 visPosSuper = 1
 visPosSub = 2
+
+SUGAR_PATTERN = re.compile(r'([_^])(\*{1,3})(.*?)\2', flags=re.DOTALL)
 
 
 def _normalize_syntax_sugar(text: str) -> str:
@@ -15,13 +19,13 @@ def _normalize_syntax_sugar(text: str) -> str:
     ^*abc*     → ^{*abc*}
     支持嵌套、支持跨多行
     """
-    pattern = r'([_^])(\*{1,3})(.*?)\2'
 
     def replace_match(match):
         sym, marker, content = match.groups()
         return f"{sym}{{{marker}{content}{marker}}}"
 
-    return re.sub(pattern, replace_match, text, flags=re.DOTALL)
+    normalized, _ = SUGAR_PATTERN.subn(replace_match, text)
+    return normalized
 
 
 def _core_parse(text: str) -> list:
@@ -88,12 +92,10 @@ def _core_parse(text: str) -> list:
             push(text[i], mode, active_italic, active_bold)
             i += 1
             continue
-
         start = i
         while i < n and text[i] not in '*_^':
             i += 1
         push(text[start:i], visPosNormal, active_italic, active_bold)
-
     return segments
 
 
@@ -101,7 +103,11 @@ def parse_latex_like(text: str) -> list:
     """完整版类 LaTeX 解析器（分层架构）"""
     if not text:
         return []
-    print(f"原始文本: {text}")
+
+    debug_print(f"parse_latex_like: 原始文本='{text}'")
     normalized = _normalize_syntax_sugar(text)
-    print(f"规范化后: {normalized}")
-    return _core_parse(normalized)
+    debug_print(f"parse_latex_like: 规范化后='{normalized}'")
+
+    segments = _core_parse(normalized)
+    debug_print(f"parse_latex_like: 完成，segments={len(segments)}")
+    return segments
