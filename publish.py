@@ -5,7 +5,8 @@
 3. git add .
 4. git commit -m "chore: bump version to x.x.x"
 5. git tag vx.x.x
-6. git push origin main --tags
+6. git push origin main
+7. git push origin vx.x.x
 
 使用方法：
 python release_and_push.py 1.0.6
@@ -145,7 +146,9 @@ def main() -> int:
         run_cmd(["git", "add", "."])
         run_cmd(["git", "commit", "-m", f"chore: bump version to {new_version}"])
         run_cmd(["git", "tag", f"v{new_version}"])
-        run_cmd(["git", "push", "origin", "main", "--tags"])
+        run_cmd(["git", "push", "origin", "main"])
+        run_cmd(["git", "push", "origin", f"v{new_version}"])
+
 
         print("发版流程完成")
         return 0
