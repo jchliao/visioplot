@@ -154,7 +154,6 @@ python main.py
 
 - 是否在 Windows 上运行
 - 是否安装了 Microsoft Visio
-- 是否安装了 pywin32
 
 ### Q2: 我只想要 SVG，不需要 Visio
 
