@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 1. 修改 pyproject.toml 的版本号
-2. git add .
-3. git commit -m "chore: bump version to x.x.x"
-4. git tag vx.x.x
-5. git push origin main --tags
+2. 修改 visioplot/__init__.py 的 __version__
+3. git add .
+4. git commit -m "chore: bump version to x.x.x"
+5. git tag vx.x.x
+6. git push origin main --tags
 
 使用方法：
 python release_and_push.py 1.0.6
@@ -87,6 +88,25 @@ def bump_patch(version: str) -> str:
     return f"{major}.{minor}.{int(patch) + 1}"
 
 
+def bump_init_version(init_path: pathlib.Path, new_version: str) -> str:
+    # 更新包内 __version__ 字段
+    text = init_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+
+    for i, line in enumerate(lines):
+        m = re.match(r'^(\s*__version__\s*=\s*)"([^"]+)"(\s*)$', line)
+        if m:
+            old_version = m.group(2)
+            prefix = m.group(1)
+            suffix = m.group(3)
+            newline = "\n" if line.endswith("\n") else ""
+            lines[i] = f'{prefix}"{new_version}"{suffix}{newline}'
+            init_path.write_text("".join(lines), encoding="utf-8")
+            return old_version
+
+    raise ValueError("未找到 __version__ 字段")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="一键更新版本并推送 GitHub 标签")
     parser.add_argument("version", nargs="?", help="版本号，格式 x.y.z，例如 1.0.6")
@@ -94,8 +114,12 @@ def main() -> int:
 
     repo_root = pathlib.Path(__file__).resolve().parent
     pyproject_path = repo_root / "pyproject.toml"
+    init_path = repo_root / "visioplot" / "__init__.py"
     if not pyproject_path.exists():
         print("错误：找不到 pyproject.toml", file=sys.stderr)
+        return 2
+    if not init_path.exists():
+        print("错误：找不到 visioplot/__init__.py", file=sys.stderr)
         return 2
 
     try:
@@ -113,7 +137,9 @@ def main() -> int:
             new_version = bump_patch(current_version)
 
         old_version = bump_pyproject_version(pyproject_path, new_version)
-        print(f"已更新版本号: {old_version} -> {new_version}")
+        old_init_version = bump_init_version(init_path, new_version)
+        print(f"已更新 pyproject 版本号: {old_version} -> {new_version}")
+        print(f"已更新 __init__ 版本号: {old_init_version} -> {new_version}")
 
         # 按你的固定流程执行
         run_cmd(["git", "add", "."])
