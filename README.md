@@ -28,7 +28,7 @@ pip install visioplot
 
 ## 环境要求
 
-- Python >= 3.11
+- Python >= 3.10
 - 主要依赖：matplotlib、beautifulsoup4、lxml
 - Visio 导出功能需要：Windows + Microsoft Visio + pywin32
 

@@ -3,7 +3,7 @@ name = "visioplot"
 version = "1.0.1"
 description = "Matplotlib to editable SVG and Visio (VSDX) export toolkit"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
 authors = [
   { name = "jchl" },
