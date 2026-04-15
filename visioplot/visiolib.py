@@ -179,6 +179,8 @@ class VisioExporter:
         finally:
             if document:
                 document.Close()
+            if not clipboard:
+                self.exit()
         return self
 
     @classmethod

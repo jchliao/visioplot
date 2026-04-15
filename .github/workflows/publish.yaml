@@ -1,0 +1,29 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*" # 当你推送形如 v1.0.0 的 tag 时触发
+
+jobs:
+  build-n-publish:
+    runs-on: ubuntu-latest
+    # 关键：必须配置 permissions 才能使用可信发布者功能
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5 # 使用官方提供的 setup-uv action
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Build package
+        run: uv build # 自动构建源码包(sdist)和轮子包(wheel)
+
+      - name: Publish to PyPI
+        run: uv publish # 自动识别 OIDC 令牌，无需手动传入 Token
