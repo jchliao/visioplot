@@ -106,6 +106,24 @@ class VisioExporter:
 
     def __init__(self, svg_path):
         self.svg_path = Path(svg_path).resolve()
+    
+    def _is_visio_running(self):
+        """
+        私有方法：检查当前保存的 Visio 实例是否仍然有效运行
+        返回 True = 有效可用；False = 已关闭/失效
+        """
+        visio = VisioExporter.visio
+        if visio is None:
+            return False
+
+        try:
+            # 尝试访问 Visio 版本属性，能访问说明进程存活
+            _version = visio.Version
+            return True
+        except Exception:
+            # 访问失败 = 进程已被关闭/失效
+            VisioExporter.visio = None
+            return False
 
     def toclip(self, vsdx_path=None, clipboard=True):
         return self.tovsd(vsdx_path=vsdx_path, clipboard=clipboard)
@@ -117,18 +135,25 @@ class VisioExporter:
         debug_print(
             f"VisioExporter.tovsd start: svg='{self.svg_path}', clipboard={clipboard}"
         )
-        try:
-            VisioExporter.visio = win32com.client.GetActiveObject("Visio.Application")
-            debug_print("Connected to existing Visio instance")
-        except Exception:
-            VisioExporter.visio = win32com.client.Dispatch("Visio.Application")
-            debug_print("Started new Visio instance")
+        if not self._is_visio_running():
+            try:
+                VisioExporter.visio = win32com.client.GetActiveObject("Visio.Application")
+                debug_print("Connected to existing Visio instance")
+            except Exception:
+                VisioExporter.visio = win32com.client.Dispatch("Visio.Application")
+                debug_print("Started new Visio instance")
+
+        visio = VisioExporter.visio
+        if visio is None:
+            error_print("无法创建或连接 Visio 实例")
+            return self
+
         document = None
         try:
-            document = VisioExporter.visio.Documents.Open(str(self.svg_path))
+            document = visio.Documents.Open(str(self.svg_path))
             debug_print("SVG document opened in Visio")
-            page = VisioExporter.visio.ActivePage
-            VisioExporter.visio.ScreenUpdating = False
+            page = visio.ActivePage
+            visio.ScreenUpdating = False
             page.PageSheet.CellsU("DrawingScale").FormulaU = "1 mm"
             page.PageSheet.CellsU("PageScale").FormulaU = "1 mm"
             for shape in page.Shapes:
@@ -138,14 +163,14 @@ class VisioExporter:
                             apply_script_formatting(sub_shape)
                         adjust_text_width(sub_shape)
             if clipboard:
-                win = VisioExporter.visio.ActiveWindow
+                win = visio.ActiveWindow
                 win.SelectAll()
                 try:
                     win.Selection.Ungroup()
                 except Exception:
                     pass
                 win.Selection.Copy()
-            VisioExporter.visio.ScreenUpdating = True
+            visio.ScreenUpdating = True
             vsdx_path = Path(vsdx_path or self.svg_path).with_suffix(".vsdx")
             document.SaveAs(str(vsdx_path))
             debug_print(f"VSDX saved: '{vsdx_path}'")
