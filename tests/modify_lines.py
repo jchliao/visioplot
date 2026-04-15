@@ -1,10 +1,10 @@
-from ltoolx.svg_utils import modify_line_path
-from ltoolx.matplotlib_utils import *  # noqa: F403
+from visioplot.svg_utils import modify_line_path
+from visioplot.matplotlib_utils import *  # noqa: F403
 from bs4 import BeautifulSoup
 import unittest
 
 
-class LtoolxTest(unittest.TestCase):
+class VisioplotTest(unittest.TestCase):
     def setUp(self) -> None:
         return super().setUp()
 

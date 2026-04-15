@@ -1,57 +1,20 @@
 from bs4 import BeautifulSoup, Tag
 from matplotlib.pyplot import gcf
+import copy
 import io
 from pathlib import Path
-import sys
+
 import matplotlib.pyplot as plt
-import copy
 from matplotlib.figure import Figure
-if sys.platform == "win32":
-    import win32com.client
 
-class Svg:
-    visio = None
-
-    def __init__(self, svg_path):
-        self.svg_path = Path(svg_path).resolve()
-
-    def to_vsd(self, vsdx_path=None, clipboard=False):
-        if vsdx_path is None:
-            vsdx_path = self.svg_path.with_suffix(".vsdx")
-        else:
-            vsdx_path = Path(vsdx_path)
-        if Svg.visio is None:
-            Svg.visio = win32com.client.Dispatch("Visio.Application")
-            Svg.visio.Visible = False
-        try:
-            document = Svg.visio.Documents.Open(self.svg_path.resolve())
-            if clipboard:
-                act_win = Svg.visio.ActiveWindow
-                # act_win.Page = document.Pages.Item(1)
-                act_win.SelectAll()
-                act_win.Selection.Copy()
-            document.SaveAs(vsdx_path.resolve())
-        except Exception as e:
-            print(f"An error occurred: {e}")
-        document.Close()
-        return self
-
-    @classmethod
-    def exit(cls):
-        if cls.visio:
-            try:
-                cls.visio.Quit()  # 退出Visio应用
-            except Exception as e:
-                print(f"Error while closing Visio: {e}")
-            finally:
-                cls.visio = None  # 清理Visio实例
+from visioplot.visiolib import VisioExporter
 
 
 class Fig:
     def __init__(self, fig):
         self.fig: Figure = copy.deepcopy(fig)
 
-    def savefig(self, *args, **kwargs) -> Svg:
+    def savefig(self, *args, **kwargs) -> VisioExporter:
         kwargs["format"] = "svg"
         fig = self.fig
         ax = fig.get_axes()[0]
@@ -67,8 +30,9 @@ class Fig:
         else:
             bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             ax.set_axis_off()
-            if ax.get_legend():
-                ax.get_legend().remove()
+            legend = ax.get_legend()
+            if legend:
+                legend.remove()
             kwargs["bbox_inches"] = bbox
             svg_buffer = io.BytesIO()
             fig.savefig(svg_buffer, **kwargs)
@@ -77,43 +41,45 @@ class Fig:
             svg_content = _svg_content(svg_content)
             combined_svg_content = _combined_svg(cleaned_svg_window, svg_content)
         combined_svg_content = _svg_clean(combined_svg_content)
-        # 坐标轴修改为线段
         combined_svg_content = modify_axis(str(combined_svg_content))
         plt.close(fig)
         fname = Path(args[0]).with_suffix(".svg")
         with open(fname, "w", encoding="utf-8") as file:
             file.write(combined_svg_content)
-        return Svg(fname)
+        return VisioExporter(fname)
 
 
-# 删除svg不必要数据
+def savefig(*args, **kwargs) -> VisioExporter:
+    fig = gcf()
+    return Fig(fig).savefig(*args, **kwargs)
+
+
 def _svg_clean(svg_content):
     soup = BeautifulSoup(svg_content, "xml")
     for metadata_tag in soup.find_all("metadata"):
         metadata_tag.decompose()
     for style_tag in soup.find_all("style"):
         style_tag.decompose()
-    for tag in soup.find_all(True):  # True 表示匹配所有标签
-        if "clip-path" in tag.attrs:  # 检查标签是否包含 clip-path 属性
-            del tag["clip-path"]  # 删除该属性
+    for tag in soup.find_all(True):
+        if "clip-path" in tag.attrs:
+            del tag["clip-path"]
     for g_tag in soup.find_all("g"):
         if g_tag.get("id") == "ax":
             continue
+        g_id = g_tag.get("id") or ""
         has_relevant_id = any(
-            k in g_tag.get("id", "") for k in ["legend", "figure", "axes"]
+            k in g_id for k in ["legend", "figure", "axes"]
         )
         has_single_child = len(g_tag.find_all()) <= 1
         if has_relevant_id or has_single_child:
-            g_tag.unwrap()  # 展开该标签
-    cleaned_svg_content = soup.prettify()
-    return cleaned_svg_content
+            g_tag.unwrap()
+    return soup.prettify()
 
 
 def _svg_windows(svg_content):
     soup = BeautifulSoup(svg_content, "xml")
     flag_out = False
     for g_tag in soup.find_all("g", id="out"):
-        # 保留path标签，删除其他标签
         path_tag_tmp = Tag(name="path")
         defs_tag = Tag(name="defs")
         for path_tag in g_tag.find_all("path"):
@@ -123,14 +89,16 @@ def _svg_windows(svg_content):
                 break
         g_tag.replace_with(defs_tag)
         flag_out = True
-    cleaned_svg_content = soup.prettify()
-    return cleaned_svg_content, flag_out
+    return soup.prettify(), flag_out
 
 
 def _svg_content(svg_content):
     soup = BeautifulSoup(svg_content, "xml")
     svg_root = soup.find("svg")
-    viewbox = svg_root.get("viewBox").split()
+    if svg_root is None:
+        return str(soup)
+    viewbox_attr = svg_root.get("viewBox") or "0 0 0 0"
+    viewbox = str(viewbox_attr).split()
     width = float(viewbox[2])
     height = float(viewbox[3])
     out_elements = soup.find_all("g", id="out")
@@ -139,23 +107,18 @@ def _svg_content(svg_content):
     if len(out_elements) == 0:
         return str(soup)
     for out_element in out_elements:
-        # 处理线
         for path_tag in out_element.find_all("path"):
             if path_tag.get("clip-path") is not None:
                 modify_line_path(path_tag)
-            # 无clip-path的元素为描述点图例的路径定义
-            # 这里默认直接读取，若图例不包含点则为空字符串
             path_tag.get("id", "")
             out_point_defs_id.append(path_tag.get("id", ""))
 
-        # 处理点
         all_g = out_element.find_all("g")
         for g_tag in all_g:
-            # 刚才那步给线加了id，无id的另一个g就包含点了
             if g_tag.get("clip-path") is not None:
                 for use_tag in g_tag.find_all("use"):
-                    x = float(use_tag.get("x"))
-                    y = float(use_tag.get("y"))
+                    x = float(str(use_tag.get("x") or 0))
+                    y = float(str(use_tag.get("y") or 0))
                     if x < 0 or x > width or y < 0 or y > height:
                         use_tag.decompose()
 
@@ -169,35 +132,30 @@ def _svg_content(svg_content):
 def _combined_svg(window, content):
     window_soup = BeautifulSoup(window, "xml")
     content_soup = BeautifulSoup(content, "xml")
-    rect_tag = window_soup.find("clipPath").find("rect")
+    clip_path_tag = window_soup.find("clipPath")
+    if clip_path_tag is None:
+        return window_soup.prettify()
+    rect_tag = clip_path_tag.find("rect")
+    if rect_tag is None:
+        return window_soup.prettify()
     ax_tag = content_soup.find("g", id="ax")
     if ax_tag:
-        ax_tag.attrs["transform"] = (
-            f"translate({rect_tag.attrs['x']}, {rect_tag.attrs['y']})"
-        )
-        window_soup.find("g", {"id": "axes_1"}).insert(2, ax_tag)
-    # for g_tag in window_soup.find_all('g'):
-    #     if g_tag.get('id') != 'ax':
-    #         g_tag.unwrap()
+        rect_x = rect_tag.get("x") or "0"
+        rect_y = rect_tag.get("y") or "0"
+        ax_tag.attrs["transform"] = f"translate({rect_x}, {rect_y})"
+        axes_tag = window_soup.find("g", {"id": "axes_1"})
+        if axes_tag is not None:
+            axes_tag.insert(2, ax_tag)
     return window_soup.prettify()
 
 
-def savefig(*args, **kwargs) -> Svg:
-    fig = gcf()
-    return Fig(fig).savefig(*args, **kwargs)
-
-
 def modify_line_path(path_element):
-    # print(path_element)
-    # 获取 d 属性的内容并分割成列表
     if path_element.name != "path":
         path_element = path_element.find("path")
     points = path_element.get("d").split()
     num_points = int(len(points) / 3)
-    # 移除 M 或 L 指令，只保留坐标点
     points = [point for point in points if point not in ("M", "L", "z")]
 
-    # 如果点数不是偶数，则无法形成有效的线段
     if len(points) % 2 != 0:
         raise ValueError(
             "The number of points is not even, cannot form valid line segments."
@@ -207,13 +165,11 @@ def modify_line_path(path_element):
         style = style.replace("stroke-linecap: square", "stroke-linecap: round")
     else:
         style += "stroke-linecap: round;"
-    # 创建一个新的 g 元素
     g = Tag(name="g")
     g["clip-path"] = path_element.get("clip-path")
     g["style"] = style
     g["id"] = "line-id"
 
-    # 生成 line 元素
     for i in range(0, num_points - 1):
         x1, y1, x2, y2 = points[2 * i : 2 * i + 4]
         line = Tag(name="line")
@@ -223,7 +179,6 @@ def modify_line_path(path_element):
         line["y2"] = y2
         g.append(line)
 
-    # 替换原来的 path 元素
     path_element.replace_with(g)
     return g
 
@@ -234,7 +189,8 @@ def modify_axis(content: str):
     """
     soup = BeautifulSoup(content, "xml")
     svg_root = soup.find("svg")
-    # 只修改这两个轴
+    if svg_root is None:
+        return str(soup)
     axis_id_list = [
         "mpl_toolkits.axisartist.axis_artist_1",
         "mpl_toolkits.axisartist.axis_artist_2",
@@ -248,27 +204,3 @@ def modify_axis(content: str):
                     modify_line_path(axis_path_tag)
     return str(soup)
 
-
-if __name__ == "__main__":
-    from ltoolx.matplotlib_utils import *
-    import mpl_toolkits.axisartist as AA
-
-    plt.axes(axes_class=AA.Axes)
-    plt.plot([1, 2, 3], [3, 5, 4], label="inax", marker="s")
-    plt.plot(
-        [1, 2, 3], [5, 15, 3], gid="out", label="outax",linewidth=10
-    )
-    
-    plt.xlim([1.25, 3])
-    plt.ylim([4.0, 10.0])
-    plt.legend()
-
-    savefig("test1.svg")
-
-    # fig= plt.figure()
-    # ax = fig.add_subplot(axes_class=AA.Axes)
-    # ax.plot([1,2,3],[3,2,4],label='inax')
-    # ax.plot([1,2,3],[5,15,3],label='outax',gid='out')
-    # ax.set_ylim([0,10])
-    # ax.legend()
-    # Fig(fig).savefig("test2.svg")

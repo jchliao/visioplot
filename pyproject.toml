@@ -1,6 +1,6 @@
 [project]
-name = "ltoolx"
-version = "0.1.5"
+name = "visioplot"
+version = "1.0.0"
 description = "Common tool packaging"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,12 +24,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jchliao/ltoolx"
-Repository = "https://github.com/jchliao/ltoolx"
+Homepage = "https://github.com/jchliao/visioplot"
+Repository = "https://github.com/jchliao/visioplot"
 
 # CLI（如未来需要）
 # [project.scripts]
-# ltoolx = "ltoolx.cli:main"
+# visioplot = "visioplot.cli:main"
 
 [dependency-groups]
 dev = [
