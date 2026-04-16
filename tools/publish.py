@@ -2,9 +2,10 @@
 """
 一键发版脚本：更新版本号 → Git提交 → 打标签 → 推送
 用法：
-python release_and_push.py        # 自动小版本递增 x.y.z+1
-python release_and_push.py 1.0.6  # 指定版本号
+python tools/publish.py        # 自动小版本递增 x.y.z+1
+python tools/publish.py 1.0.6  # 指定版本号
 """
+
 import argparse
 import pathlib
 import re
@@ -13,9 +14,10 @@ import sys
 
 # 常量配置（集中管理，一目了然）
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
-PROJECT_DIR = pathlib.Path(__file__).parent
-PYPROJECT_PATH = PROJECT_DIR / "pyproject.toml"
-INIT_PATH = PROJECT_DIR / "visioplot" / "__init__.py"
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
+INIT_PATH = PROJECT_ROOT / "visioplot" / "__init__.py"
 
 
 def run_cmd(cmd: list) -> None:
@@ -29,14 +31,11 @@ def update_version(file: pathlib.Path, key: str, new_ver: str):
     content = file.read_text("utf-8")
     # 正则匹配：key = "xxx"
     new_content, count = re.subn(
-        rf'^(\s*{key}\s*=\s*)"[^"]+"',
-        rf'\1"{new_ver}"',
-        content,
-        flags=re.MULTILINE
+        rf'^(\s*{key}\s*=\s*)"[^"]+"', rf'\1"{new_ver}"', content, flags=re.MULTILINE
     )
     if count == 0:
         raise ValueError(f"未找到字段：{key}")
-    
+
     file.write_text(new_content, "utf-8")
 
 
@@ -73,7 +72,7 @@ def main() -> int:
         # 确定新版本号
         current_ver = get_current_version()
         new_ver = args.version.strip() if args.version else bump_patch(current_ver)
-        
+
         # 校验版本格式
         if not VERSION_PATTERN.match(new_ver):
             print("错误：版本号必须为 x.y.z 格式", file=sys.stderr)

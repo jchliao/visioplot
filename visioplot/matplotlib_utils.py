@@ -22,5 +22,6 @@ def reset_style():
     """Restore matplotlib defaults."""
     plt.rcdefaults()
 
+
 def cm(*args):
     return tuple(x / 2.54 for x in args)
