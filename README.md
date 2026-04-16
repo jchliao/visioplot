@@ -1,28 +1,30 @@
 # Visioplot
 
-Visioplot 是一个面向科研绘图与工程汇报场景的 Python 工具库，重点提供：
+Visioplot 是一个面向科研绘图和工程汇报场景的 Python 工具库，目标是让 Matplotlib 图在 Visio、Word 或 PPT 中更好呈现。
 
-- Matplotlib 图形导出为结构更易编辑的 SVG。
-- SVG 转 Visio（VSDX）和剪贴板导出。
-- 类 LaTeX 文本样式解析（上下标、粗体、斜体、粗斜体）。
+它提供两层能力：
+
+- 绘图输出层：把 Matplotlib 输出的 SVG 图修改为更适合 MS Office 编辑的 SVG。
+- 办公流转层：在 Windows + Visio 环境下将 SVG 转为 VSDX 或复制到剪贴板。
+
+## 功能概览
+
+- 将 Matplotlib 图导出为更适合 MS Office 的 SVG。
+- 支持将 SVG 进一步导出为 VSDX，或直接复制到剪贴板。
+- 支持类 LaTeX 文本解析：上下标、粗体、斜体、粗斜体。
+- 提供统一样式入口，适配论文和工程汇报常见图表需求。
 
 ## 适用场景
 
-- 在 Python 中完成绘图后，需要在 Visio/PPT 继续精修图形。
+- 在 Python 中完成绘图后，需要在 Visio / PPT 中继续精修图形。
 - 需要把超出坐标轴范围的曲线做可编辑线段化处理。
-- 需要在 Visio 中保留部分文本样式（例如上下标、粗斜体）。
-
-## 安装
-
-```bash
-pip install visioplot
-```
+- 需要在 Visio 中保留部分文本样式，例如上下标、粗斜体。
 
 ## 环境要求
 
-- Python >= 3.10
-- 主要依赖：matplotlib、beautifulsoup4、lxml
-- Visio 导出功能需要：Windows + Microsoft Visio + pywin32
+- Python 3.10 及以上。
+- 主要依赖：matplotlib、beautifulsoup4、lxml、numpy。
+- Visio 导出功能需要：Windows + Microsoft Visio + pywin32。
 
 ## 快速开始
 
