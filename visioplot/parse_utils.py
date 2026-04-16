@@ -1,13 +1,8 @@
 import re
-
 from visioplot.debug_utils import debug_print
+from visioplot.visconst import visPosNormal, visPosSuper, visPosSub
 
-
-visPosNormal = 0
-visPosSuper = 1
-visPosSub = 2
-
-SUGAR_PATTERN = re.compile(r'([_^])(\*{1,3})(.*?)\2', flags=re.DOTALL)
+SUGAR_PATTERN = re.compile(r"([_^])(\*{1,3})(.*?)\2", flags=re.DOTALL)
 
 
 def _normalize_syntax_sugar(text: str) -> str:
@@ -54,12 +49,12 @@ def _core_parse(text: str) -> list:
     while i < n:
         c = text[i]
 
-        if c == '*':
-            if text.startswith('***', i):
+        if c == "*":
+            if text.startswith("***", i):
                 active_bold = not active_bold
                 active_italic = not active_italic
                 i += 3
-            elif text.startswith('**', i):
+            elif text.startswith("**", i):
                 active_bold = not active_bold
                 i += 2
             else:
@@ -67,23 +62,23 @@ def _core_parse(text: str) -> list:
                 i += 1
             continue
 
-        if c in ('_', '^'):
-            mode = visPosSub if c == '_' else visPosSuper
+        if c in ("_", "^"):
+            mode = visPosSub if c == "_" else visPosSuper
             i += 1
             if i >= n:
                 break
 
-            if text[i] == '{':
+            if text[i] == "{":
                 i += 1
                 start = i
                 brace = 1
                 while i < n and brace > 0:
-                    if text[i] == '{':
+                    if text[i] == "{":
                         brace += 1
-                    elif text[i] == '}':
+                    elif text[i] == "}":
                         brace -= 1
                     i += 1
-                content = text[start:i - 1]
+                content = text[start : i - 1]
                 sub_segs = _core_parse(content)
                 for t, _, it, bd in sub_segs:
                     push(t, mode, it or active_italic, bd or active_bold)
@@ -93,7 +88,7 @@ def _core_parse(text: str) -> list:
             i += 1
             continue
         start = i
-        while i < n and text[i] not in '*_^':
+        while i < n and text[i] not in "*_^":
             i += 1
         push(text[start:i], visPosNormal, active_italic, active_bold)
     return segments
