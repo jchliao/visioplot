@@ -1,7 +1,7 @@
 import copy
 import io
 from pathlib import Path
-from itertools import pairwise
+import re
 from bs4 import BeautifulSoup, Tag
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -43,8 +43,9 @@ class Fig:
             _combined_svg(main_soup, sub_soup)
 
         # 修改坐标轴统一清理
-        modify_axis(main_soup)
         _svg_clean(main_soup)
+        modify_axis(main_soup)
+
         plt.close(fig)
         fname = Path(args[0]).with_suffix(".svg")
         with open(fname, "w", encoding="utf-8") as file:
@@ -143,28 +144,56 @@ def modify_line_path(path: Tag):
     target_path = path if path.name == "path" else path.find("path")
     if not target_path:
         return
+    
     d_attr = str(target_path.get("d", ""))
-    coords = d_attr.split()
-    coords = [n for n in d_attr.split() if n not in ("M", "L", "z")]
-    num_coords = len(coords)
-    if num_coords < 4 or num_coords % 2 != 0:
+    # 使用正则匹配指令(M/L/z等)和数字(包括负数和小数)
+    tokens = re.findall(r'[MLZmlz]|[+-]?\d*\.?\d+', d_attr)
+    
+    lines_to_create = []
+    current_pos = None
+    i = 0
+    
+    while i < len(tokens):
+        token = tokens[i]
+        
+        if token.upper() == 'M':
+            # M 指令：移动当前点
+            current_pos = (tokens[i+1], tokens[i+2])
+            i += 3
+        elif token.upper() == 'L':
+            # L 指令：从当前点连线到目标点
+            new_pos = (tokens[i+1], tokens[i+2])
+            if current_pos:
+                lines_to_create.append((current_pos, new_pos))
+            current_pos = new_pos
+            i += 3
+        else:
+            # 兼容处理：如果没有显式指令但有连续坐标（SVG 允许 M x y x2 y2 隐式转 L）
+            i += 1
+
+    if not lines_to_create:
         return
-    it = iter(coords)
-    points = list(zip(it, it))
+
+    # 样式处理
     style = str(target_path.get("style", ""))
     if "stroke-linecap" in style:
-        style = style.replace("stroke-linecap: square", "stroke-linecap: round")
+        style = style.replace("stroke-linecap:square", "stroke-linecap:round").replace("stroke-linecap: square", "stroke-linecap: round")
     else:
-        style += "; stroke-linecap: round"
-    g = Tag(name="g", attrs={"id": "line-id", "style": style.lstrip("; ")})
+        style = (style.rstrip(";") + "; stroke-linecap: round").lstrip("; ")
+
+    # 创建容器
+    g = Tag(name="g", attrs={"id": "line-id", "style": style})
     if cp := target_path.get("clip-path"):
         g["clip-path"] = cp
 
-    for p1, p2 in pairwise(points):
+    # 填充 line 标签
+    for p1, p2 in lines_to_create:
         line = Tag(name="line")
         line["x1"], line["y1"] = p1
         line["x2"], line["y2"] = p2
+        # 注意：原 path 的 stroke 属性通常在 style 或单独属性中，line 会继承 g 的样式
         g.append(line)
+
     target_path.replace_with(g)
 
 
