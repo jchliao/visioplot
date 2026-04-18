@@ -233,7 +233,7 @@ def get_path_category(d_attr: str):
     # 第三步：没有小数、没有曲线 → 纯整数直线 → 返回 1
     return 1
 
-def clip_line_to_square(x1, y1, x2, y2, size=73.0):
+def clip_line_to_square(x1, y1, x2, y2, size=73):
     if x1 == x2 and y1 == y2:
         return []
 
@@ -270,8 +270,10 @@ def clip_line_to_square(x1, y1, x2, y2, size=73.0):
 
 def modify_path_extend_clip(soup: BeautifulSoup):
     for path in soup.select('pattern[patternUnits="userSpaceOnUse"] path'):
+            # 样式处理
+        style = str(path.get("style", ""))
+        path["style"] = style.replace("stroke-linecap: butt", "stroke-linecap: square")
         d_attr = str(path.get("d", ""))
-        
         # 1. 类别判断
         category = get_path_category(d_attr)
         
@@ -290,39 +292,39 @@ def modify_path_extend_clip(soup: BeautifulSoup):
                     new_d.append(f"M {nx1:.3f} {ny1:.3f} L {nx2:.3f} {ny2:.3f}")
             if new_d:
                 path["d"] = " ".join(new_d)
-
+            continue
         # --- 类别 2 & 3: 坐标平移归零逻辑 ---
-        else:
-            xs = f[0::2]
-            ys = f[1::2]
+
+        xs = f[0::2]
+        ys = f[1::2]
+        
+        if not xs or not ys:
+            continue
             
-            if not xs or not ys:
-                continue
-                
-            min_x = min(xs)
-            min_y = min(ys)
-            
-            # 计算平移后的新 d 属性
-            # 我们需要保留原有的指令字母 (M, L, C, z 等)
-            tokens = re.findall(r'[A-Za-z]|[+-]?\d*\.?\d+', d_attr)
-            new_tokens = []
-            
-            is_x_coord = True # 标记当前数字应该是 x 还是 y
-            for token in tokens:
-                # 如果是字母指令，直接保留，并重置坐标交替逻辑
-                if re.match(r'[A-Za-z]', token):
-                    new_tokens.append(token)
-                    # 注意：SVG 坐标通常成对出现，第一个数字是 x
-                    is_x_coord = True 
+        min_x = min(xs)
+        min_y = min(ys)
+        
+        # 计算平移后的新 d 属性
+        # 我们需要保留原有的指令字母 (M, L, C, z 等)
+        tokens = re.findall(r'[A-Za-z]|[+-]?\d*\.?\d+', d_attr)
+        new_tokens = []
+        
+        is_x_coord = True # 标记当前数字应该是 x 还是 y
+        for token in tokens:
+            # 如果是字母指令，直接保留，并重置坐标交替逻辑
+            if re.match(r'[A-Za-z]', token):
+                new_tokens.append(token)
+                # 注意：SVG 坐标通常成对出现，第一个数字是 x
+                is_x_coord = True 
+            else:
+                # 如果是数字，进行平移
+                val = float(token)
+                if is_x_coord:
+                    new_val = val - min_x
+                    is_x_coord = False # 下一个是 y
                 else:
-                    # 如果是数字，进行平移
-                    val = float(token)
-                    if is_x_coord:
-                        new_val = val - min_x
-                        is_x_coord = False # 下一个是 y
-                    else:
-                        new_val = val - min_y
-                        is_x_coord = True # 下一个是 x
-                    new_tokens.append(f"{new_val:.3f}")
-            
-            path["d"] = " ".join(new_tokens)
+                    new_val = val - min_y
+                    is_x_coord = True # 下一个是 x
+                new_tokens.append(f"{new_val:.3f}")
+        
+        path["d"] = " ".join(new_tokens)
