@@ -15,8 +15,7 @@ def example1_axisartist_svg_only():
     plt.plot(
         [1, 2, 3], [5, 15, 3], gid="out", label="outax", linestyle="--", marker="o"
     )
-    plt.xlim([1.25, 3])
-    plt.ylim([4.0, 10.0])
+    plt.ylim([0, 10])
     plt.legend()
     vp.savefig("example1_axisartist.svg")
     print("example1 done: example1_axisartist.svg")
