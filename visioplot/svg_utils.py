@@ -145,25 +145,24 @@ def modify_line_path(path: Tag):
     target_path = path if path.name == "path" else path.find("path")
     if not target_path:
         return
-    
     d_attr = str(target_path.get("d", ""))
     # 使用正则匹配指令(M/L/z等)和数字(包括负数和小数)
-    tokens = re.findall(r'[MLZmlz]|[+-]?\d*\.?\d+', d_attr)
-    
+    tokens = re.findall(r"[MLZmlz]|[+-]?\d*\.?\d+", d_attr)
+
     lines_to_create = []
     current_pos = None
     i = 0
-    
+
     while i < len(tokens):
         token = tokens[i]
-        
-        if token.upper() == 'M':
+
+        if token.upper() == "M":
             # M 指令：移动当前点
-            current_pos = (tokens[i+1], tokens[i+2])
+            current_pos = (tokens[i + 1], tokens[i + 2])
             i += 3
-        elif token.upper() == 'L':
+        elif token.upper() == "L":
             # L 指令：从当前点连线到目标点
-            new_pos = (tokens[i+1], tokens[i+2])
+            new_pos = (tokens[i + 1], tokens[i + 2])
             if current_pos:
                 lines_to_create.append((current_pos, new_pos))
             current_pos = new_pos
@@ -178,7 +177,9 @@ def modify_line_path(path: Tag):
     # 样式处理
     style = str(target_path.get("style", ""))
     if "stroke-linecap" in style:
-        style = style.replace("stroke-linecap:square", "stroke-linecap:round").replace("stroke-linecap: square", "stroke-linecap: round")
+        style = style.replace("stroke-linecap:square", "stroke-linecap:round").replace(
+            "stroke-linecap: square", "stroke-linecap: round"
+        )
     else:
         style = (style.rstrip(";") + "; stroke-linecap: round").lstrip("; ")
 
@@ -233,57 +234,64 @@ def get_path_category(d_attr: str):
     # 第三步：没有小数、没有曲线 → 纯整数直线 → 返回 1
     return 1
 
+
 def clip_line_to_square(x1, y1, x2, y2, size=73):
+    # 移除默认参数，简化判断
     if x1 == x2 and y1 == y2:
         return []
-
     points = []
-    # 垂直线处理
     if x1 == x2:
         if 0 <= x1 <= size:
-            points = [(x1, 0.0), (x1, size)]
-    else:
-        k = (y2 - y1) / (x2 - x1)
-        b = y1 - k * x1
+            return [(x1, 0.0), (x1, size)]
+        return []
 
-        # 候选交点检查函数
-        def add_if_in(px, py):
-            if 0 <= round(px, 6) <= size and 0 <= round(py, 6) <= size:
-                points.append((px, py))
+    k = (y2 - y1) / (x2 - x1)
+    b = y1 - k * x1
 
-        add_if_in(0, b)  # x=0
-        add_if_in(size, k * size + b)  # x=size
-        if k != 0:
-            add_if_in(-b / k, 0)  # y=0
-            add_if_in((size - b) / k, size)  # y=size
+    # x=0
+    y = b
+    if 0 <= y <= size:
+        points.append((0.0, y))
+    # x=size
+    y = k * size + b
+    if 0 <= y <= size:
+        points.append((size, y))
+    # y=0
+    if k != 0:
+        x = -b / k
+        if 0 <= x <= size:
+            points.append((x, 0.0))
+        # y=size
+        x = (size - b) / k
+        if 0 <= x <= size:
+            points.append((x, size))
 
-    # 浮点数去重
-    unique = []
-    for p in sorted(points):
-        if not unique or (
-            abs(p[0] - unique[-1][0]) > 1e-6 or abs(p[1] - unique[-1][1]) > 1e-6
-        ):
-            unique.append(p)
-
-    return [unique[0], unique[-1]] if len(unique) >= 2 else []
+    # 简化去重逻辑，无排序+快速判断
+    if len(points) < 2:
+        return []
+    return [points[0], points[-1]]
 
 
 def modify_path_extend_clip(soup: BeautifulSoup):
     for path in soup.select('pattern[patternUnits="userSpaceOnUse"] path'):
-            # 样式处理
-        style = str(path.get("style", ""))
-        path["style"] = style.replace("stroke-linecap: butt", "stroke-linecap: square")
+        # --- 1. 获取基础数据 ---
         d_attr = str(path.get("d", ""))
-        # 1. 类别判断
-        category = get_path_category(d_attr)
-        
-        # 提取所有数字坐标
-        rep = re.findall(r"[-+]?\d*\.?\d+", d_attr)
-        if not rep:
-            continue
-        f = list(map(float, rep))
+        style_attr = str(path.get("style", ""))
 
-        # --- 类别 1: 线段裁剪扩展逻辑 (保持不变) ---
+        # 提取当前 path 下所有的数字坐标
+        all_coords = list(map(float, re.findall(r"[-+]?\d*\.?\d+", d_attr)))
+        if not all_coords:
+            continue
+        f = all_coords
+
+        # 预处理 style：修改 linecap
+        style_attr = style_attr.replace(
+            "stroke-linecap: butt", "stroke-linecap: square"
+        )
+
+        category = get_path_category(d_attr)
+
+        # 类别 1: 线段逻辑
         if category == 1:
             new_d = []
             for i in range(0, len(f) - 3, 4):
@@ -292,39 +300,46 @@ def modify_path_extend_clip(soup: BeautifulSoup):
                     new_d.append(f"M {nx1:.3f} {ny1:.3f} L {nx2:.3f} {ny2:.3f}")
             if new_d:
                 path["d"] = " ".join(new_d)
+                # 清洗 style 里的 fill 并设置 fill 属性
+                path["style"] = re.sub(r"fill\s*:\s*[^;]+;?", "", style_attr).strip()
+                path["fill"] = "none"
             continue
-        # --- 类别 2 & 3: 坐标平移归零逻辑 ---
 
-        xs = f[0::2]
-        ys = f[1::2]
-        
-        if not xs or not ys:
-            continue
-            
-        min_x = min(xs)
-        min_y = min(ys)
-        
-        # 计算平移后的新 d 属性
-        # 我们需要保留原有的指令字母 (M, L, C, z 等)
-        tokens = re.findall(r'[A-Za-z]|[+-]?\d*\.?\d+', d_attr)
-        new_tokens = []
-        
-        is_x_coord = True # 标记当前数字应该是 x 还是 y
-        for token in tokens:
-            # 如果是字母指令，直接保留，并重置坐标交替逻辑
-            if re.match(r'[A-Za-z]', token):
-                new_tokens.append(token)
-                # 注意：SVG 坐标通常成对出现，第一个数字是 x
-                is_x_coord = True 
-            else:
-                # 如果是数字，进行平移
-                val = float(token)
-                if is_x_coord:
-                    new_val = val - min_x
-                    is_x_coord = False # 下一个是 y
-                else:
-                    new_val = val - min_y
-                    is_x_coord = True # 下一个是 x
-                new_tokens.append(f"{new_val:.3f}")
-        
-        path["d"] = " ".join(new_tokens)
+        # 3: 圆圈替换 + G 标签包裹
+        elif category == 3:
+            sub_paths = re.findall(r"(M[^Mz]+z)", d_attr)
+            unique_circles = {}
+            for sub_d in sub_paths:
+                sub_f = list(map(float, re.findall(r"[-+]?\d*\.?\d+", sub_d)))
+                if not sub_f:
+                    continue
+                sub_xs, sub_ys = sub_f[0::2], sub_f[1::2]
+                rel_cx = (min(sub_xs) + max(sub_xs)) / 2
+                rel_cy = (min(sub_ys) + max(sub_ys)) / 2
+                r = max(max(sub_xs) - min(sub_xs), max(sub_ys) - min(sub_ys)) / 2
+                key = (round(rel_cx, 2), round(rel_cy, 2))
+                if key not in unique_circles or r > unique_circles[key]:
+                    unique_circles[key] = r
+            if not unique_circles:
+                continue
+            # 创建 <g> 容器
+            g_tag = soup.new_tag("g")
+
+            # --- 提取并清洗通用样式到 g 标签 ---
+            # 移除 fill 声明，将 linecap 设为 round
+            clean_style = re.sub(r"fill\s*:\s*[^;]+;?", "", style_attr).strip()
+            clean_style = clean_style.replace(
+                "stroke-linecap: square", "stroke-linecap: round"
+            )
+            if clean_style and not clean_style.endswith(";"):
+                clean_style += ";"
+            g_tag["style"] = clean_style
+            g_tag["fill"] = "none"
+            for (cx, cy), r in unique_circles.items():
+                c = soup.new_tag("circle")
+                c["cx"] = f"{cx:.3f}"
+                c["cy"] = f"{cy:.3f}"
+                c["r"] = f"{r:.3f}"
+                g_tag.append(c)
+            path.insert_before(g_tag)
+            path.decompose()

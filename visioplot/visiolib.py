@@ -19,6 +19,7 @@ from visioplot.visconst import (
     visPosNormal,
     visRowParagraph,
     visXFormPinX,
+    visXFormPinY,
     visXFormLocPinX,
     visXFormWidth,
     visSectionObject,
@@ -169,6 +170,7 @@ class VisioExporter:
                     if PATTERN.search(txt):
                         apply_script_formatting(sub_shape, txt)
                     adjust_text_width(sub_shape)
+            modify_all_fill_patterns(document)
             visio.DeferRecalc = False
             if clipboard:
                 page.CreateSelection(visSelTypeAll).Copy()
@@ -196,3 +198,21 @@ class VisioExporter:
                 pass
             finally:
                 cls.visio = None
+
+
+PATTERN_WRITE_CONFIG = [
+    [visSectionObject, visRowXFormOut, visXFormPinX],
+    [visSectionObject, visRowXFormOut, visXFormPinY],
+]
+PATTERN_WRITE_STREAM = array.array("h", sum(PATTERN_WRITE_CONFIG, []))
+
+
+def modify_all_fill_patterns(doc):
+    for master in doc.Masters:
+        master_edit = master.Open()
+        for shp in master_edit.Shapes:
+            for subshp in shp.Shapes:
+                subshp.SetFormulas(
+                    PATTERN_WRITE_STREAM, ["Sheet.5!Width*0.5", "Sheet.5!Height*0.5"], 0
+                )
+        master_edit.Close()
