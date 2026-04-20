@@ -1,12 +1,17 @@
 from pathlib import Path
 import re
 import sys
+import os
 import array
 from visioplot.debug_utils import debug_print, error_print, warn_print
 from visioplot.parse_utils import parse_latex_like
 
 if sys.platform == "win32":
-    import win32com.client
+    import win32com.client as win32c
+    import win32job
+    import win32process
+    import win32api
+    import win32con
 
 from visioplot.visconst import (
     visCharacterStyle,
@@ -27,12 +32,12 @@ from visioplot.visconst import (
     visSelTypeAll,
     visTypeGroup,
     visSelTypeByType,
-    visSelModeSkipSub,
+    visSelModeSkipSuper,
     visTypeSelGroup,
+    visWSMinimized,
 )
 
 
-PATTERN = re.compile(r"[\*\_\^]")
 GREEK_PATTERN = re.compile(r"[α-ωΑ-Ω]")  # 匹配希腊字母（包括大写和小写）
 
 
@@ -93,33 +98,99 @@ def adjust_text_width(shape):
 
 def iter_shapes(parent):
     try:
-        shps = parent.Shapes
-        for i in range(1, shps.Count + 1):
-            s = shps.Item(i)
-            yield s
-            if s.Type == visTypeGroup:
-                yield from iter_shapes(s)
-    except Exception:
+        shapes = parent.Shapes
+    except Exception as e:
+        error_print(f"Error occurred while iterating shapes: {e}")
         return
+    for s in shapes:
+        yield s
+        if s.Type == visTypeGroup:
+            try:
+                yield from iter_shapes(s)
+            except Exception as e:
+                warn_print(f"Skip bad group: {e}")
+                continue
 
 
 class VisioExporter:
     visio = None
+    _job = None
 
     def __init__(self, svg_path):
         self.svg_path = Path(svg_path).resolve()
 
-    def _is_visio_running(self):
-        visio = VisioExporter.visio
-        if visio is None:
-            return False
+    @classmethod
+    def _bind_lifecycle(cls, visio):
+        if cls._job is None:
+            # 创建 Job 对象
+            cls._job = win32job.CreateJobObject(None, f"VisioJob_{os.getpid()}")
+            if cls._job is None:
+                error_print("Failed to create Job object for Visio process management.")
+                return
+            info = win32job.QueryInformationJobObject(
+                cls._job, win32job.JobObjectExtendedLimitInformation
+            )
+            # 核心：Job 句柄关闭时，自动强制结束内部所有进程
+            info["BasicLimitInformation"]["LimitFlags"] |= (
+                win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            )
+            win32job.SetInformationJobObject(
+                cls._job, win32job.JobObjectExtendedLimitInformation, info
+            )
+        hwnd = visio.Application.WindowHandle32
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        access = win32con.PROCESS_TERMINATE | win32con.PROCESS_SET_QUOTA
+        handle = win32api.OpenProcess(access, False, pid)
+
         try:
-            # 尝试访问 Visio 版本属性，能访问说明进程存活
-            _version = visio.Version
-            return True
-        except Exception:
-            VisioExporter.visio = None
-            return False
+            win32job.AssignProcessToJobObject(cls._job, handle)
+        finally:
+            win32api.CloseHandle(handle)
+
+    @classmethod
+    def get_visio(cls):
+        if cls.visio is not None:
+            try:
+                _ = cls.visio.Version
+                return cls.visio
+            except Exception:
+                cls.visio = None
+        cls.visio = win32c.DispatchEx("Visio.Application")
+        cls.visio.Visible = False
+        cls._bind_lifecycle(cls.visio)
+        return cls.visio
+
+    @classmethod
+    def exit(cls):
+        if cls.visio:
+            try:
+                cls.visio.AlertResponse = 6  # IDYES 保存剪切板数据
+                cls.visio.Quit()
+            except Exception:
+                pass
+            finally:
+                cls.visio = None
+        if cls._job:
+            win32api.CloseHandle(cls._job)
+            cls._job = None
+
+    def safe_save(self, document, vsdx_path):
+        target = Path(vsdx_path or self.svg_path)
+        vsdx_path = target.with_suffix(".vsdx").resolve()
+        directory = vsdx_path.parent
+        stem = vsdx_path.stem
+        suffix = vsdx_path.suffix
+        final_path = vsdx_path
+        counter = 1
+        while final_path.exists():
+            try:
+                with open(final_path, "r+"):
+                    break
+            except (PermissionError, OSError):
+                final_path = directory / f"{stem}({counter}){suffix}"
+                counter += 1
+        document.SaveAs(str(final_path))
+        debug_print(f"VSDX saved: '{final_path}'")
 
     def toclip(self, vsdx_path=None, clipboard=True):
         return self.tovsd(vsdx_path=vsdx_path, clipboard=clipboard)
@@ -133,22 +204,9 @@ class VisioExporter:
         debug_print(
             f"VisioExporter.tovsd start: svg='{self.svg_path}', clipboard={clipboard}"
         )
-        if not self._is_visio_running():
-            try:
-                VisioExporter.visio = win32com.client.GetActiveObject(
-                    "Visio.Application"
-                )
-                debug_print("Connected to existing Visio instance")
-            except Exception:
-                VisioExporter.visio = win32com.client.Dispatch("Visio.Application")
-                debug_print("Started new Visio instance")
-
-        visio = VisioExporter.visio
-        if visio is None:
-            error_print("无法创建或连接 Visio 实例")
-            return self
-
-        document = None
+        # if not (visio := self.get_visio()):
+        #     return self
+        visio = VisioExporter.get_visio()
         try:
             document = visio.Documents.Open(str(self.svg_path))
             debug_print("SVG document opened in Visio")
@@ -156,48 +214,35 @@ class VisioExporter:
             visio.ScreenUpdating = False
             visio.EventsEnabled = False
             visio.DeferRecalc = True
+            visio.UndoEnabled = False
             page.PageSheet.CellsU("DrawingScale").FormulaU = "1 mm"
             page.PageSheet.CellsU("PageScale").FormulaU = "1 mm"
             try:
                 page.CreateSelection(
-                    visSelTypeByType, visSelModeSkipSub, visTypeSelGroup
+                    visSelTypeByType, visSelModeSkipSuper, visTypeSelGroup
                 ).Ungroup()
             except Exception:
                 pass
             for sub_shape in iter_shapes(page):
                 txt = sub_shape.Text
-                if txt:
-                    if PATTERN.search(txt):
-                        apply_script_formatting(sub_shape, txt)
-                    adjust_text_width(sub_shape)
+                if not txt:
+                    continue
+                if any(c in txt for c in "*_^"):
+                    apply_script_formatting(sub_shape, txt)
+                adjust_text_width(sub_shape)
             modify_all_fill_patterns(document)
             visio.DeferRecalc = False
-            if clipboard:
-                page.CreateSelection(visSelTypeAll).Copy()
             visio.EventsEnabled = True
             visio.ScreenUpdating = True
-
-            vsdx_path = Path(vsdx_path or self.svg_path).with_suffix(".vsdx")
-            document.SaveAs(str(vsdx_path))
-            debug_print(f"VSDX saved: '{vsdx_path}'")
+            visio.UndoEnabled = True
+            self.safe_save(document, vsdx_path)
+            if clipboard:
+                page.CreateSelection(visSelTypeAll).Copy()
+            document.Close()
         except Exception as e:
+            VisioExporter.exit()
             error_print(f"发生错误: {e}")
-        finally:
-            if document:
-                document.Close()
-            if not clipboard:
-                self.exit()
         return self
-
-    @classmethod
-    def exit(cls):
-        if cls.visio:
-            try:
-                cls.visio.Quit()
-            except Exception:
-                pass
-            finally:
-                cls.visio = None
 
 
 PATTERN_WRITE_CONFIG = [
@@ -211,8 +256,11 @@ def modify_all_fill_patterns(doc):
     for master in doc.Masters:
         master_edit = master.Open()
         for shp in master_edit.Shapes:
+            sid = shp.NameID
             for subshp in shp.Shapes:
                 subshp.SetFormulas(
-                    PATTERN_WRITE_STREAM, ["Sheet.5!Width*0.5", "Sheet.5!Height*0.5"], 0
+                    PATTERN_WRITE_STREAM,
+                    [f"{sid}!Width*0.5", f"{sid}!Height*0.5"],
+                    0,
                 )
         master_edit.Close()

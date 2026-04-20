@@ -29,4 +29,4 @@ def warn_print(message: str):
 
 def error_print(message: str):
     """Error log helper for failure reporting."""
-    LOGGER.error(message)
+    LOGGER.error(message, exc_info=True)
