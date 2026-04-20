@@ -1,18 +1,10 @@
 from pathlib import Path
 import re
 import sys
-import os
 import array
 from visioplot.debug_utils import debug_print, error_print, warn_print
 from visioplot.parse_utils import parse_latex_like
-
-if sys.platform == "win32":
-    import win32com.client as win32c
-    import win32job
-    import win32process
-    import win32api
-    import win32con
-
+from visioplot.visioapp import VisioApp
 from visioplot.visconst import (
     visCharacterStyle,
     visCharacterPos,
@@ -113,66 +105,8 @@ def iter_shapes(parent):
 
 
 class VisioExporter:
-    visio = None
-    _job = None
-
     def __init__(self, svg_path):
         self.svg_path = Path(svg_path).resolve()
-
-    @classmethod
-    def _bind_lifecycle(cls, visio):
-        if cls._job is None:
-            # 创建 Job 对象
-            cls._job = win32job.CreateJobObject(None, f"VisioJob_{os.getpid()}")
-            if cls._job is None:
-                error_print("Failed to create Job object for Visio process management.")
-                return
-            info = win32job.QueryInformationJobObject(
-                cls._job, win32job.JobObjectExtendedLimitInformation
-            )
-            # 核心：Job 句柄关闭时，自动强制结束内部所有进程
-            info["BasicLimitInformation"]["LimitFlags"] |= (
-                win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            )
-            win32job.SetInformationJobObject(
-                cls._job, win32job.JobObjectExtendedLimitInformation, info
-            )
-        hwnd = visio.Application.WindowHandle32
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        access = win32con.PROCESS_TERMINATE | win32con.PROCESS_SET_QUOTA
-        handle = win32api.OpenProcess(access, False, pid)
-
-        try:
-            win32job.AssignProcessToJobObject(cls._job, handle)
-        finally:
-            win32api.CloseHandle(handle)
-
-    @classmethod
-    def get_visio(cls):
-        if cls.visio is not None:
-            try:
-                _ = cls.visio.Version
-                return cls.visio
-            except Exception:
-                cls.visio = None
-        cls.visio = win32c.DispatchEx("Visio.Application")
-        cls.visio.Visible = False
-        cls._bind_lifecycle(cls.visio)
-        return cls.visio
-
-    @classmethod
-    def exit(cls):
-        if cls.visio:
-            try:
-                cls.visio.AlertResponse = 6  # IDYES 保存剪切板数据
-                cls.visio.Quit()
-            except Exception:
-                pass
-            finally:
-                cls.visio = None
-        if cls._job:
-            win32api.CloseHandle(cls._job)
-            cls._job = None
 
     def safe_save(self, document, vsdx_path):
         target = Path(vsdx_path or self.svg_path)
@@ -197,19 +131,13 @@ class VisioExporter:
 
     def tovsd(self, vsdx_path=None, clipboard=False):
         if sys.platform != "win32":
-            warn_print(
-                "Visio export is only supported on Windows with Visio installed."
-            )
+            warn_print("Only supported on Windows.")
             return self
-        debug_print(
-            f"VisioExporter.tovsd start: svg='{self.svg_path}', clipboard={clipboard}"
-        )
-        # if not (visio := self.get_visio()):
-        #     return self
-        visio = VisioExporter.get_visio()
+
+        visio = VisioApp.get()
+
         try:
             document = visio.Documents.Open(str(self.svg_path))
-            debug_print("SVG document opened in Visio")
             page = visio.ActivePage
             visio.ScreenUpdating = False
             visio.EventsEnabled = False
@@ -240,8 +168,12 @@ class VisioExporter:
                 page.CreateSelection(visSelTypeAll).Copy()
             document.Close()
         except Exception as e:
-            VisioExporter.exit()
             error_print(f"发生错误: {e}")
+        finally:
+            visio.DeferRecalc = False
+            visio.EventsEnabled = True
+            visio.ScreenUpdating = True
+            visio.UndoEnabled = True
         return self
 
 
