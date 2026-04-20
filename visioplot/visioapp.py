@@ -53,8 +53,12 @@ class VisioApp:
             except Exception:
                 cls._instance = None
         visio = win32c.DispatchEx("Visio.Application")
-        visio.Visible = False
-        cls._bind_lifecycle(visio)
+        try:
+            cls._bind_lifecycle(visio)
+            visio.Visible = False
+        except Exception as e:
+            visio.Visible = True
+            error_print(f"Failed to bind Visio lifecycle: {e}")
         cls._instance = visio
         return visio
 
@@ -68,6 +72,3 @@ class VisioApp:
                 pass
             finally:
                 cls._instance = None
-        if cls._job:
-            win32api.CloseHandle(cls._job)
-            cls._job = None
