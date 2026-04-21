@@ -33,14 +33,11 @@ classifiers = [
 license = { file = "LICENSE" }
 
 dependencies = [
-    "numpy",
     "matplotlib",
     "lxml",
     "beautifulsoup4",
     "pywin32; sys_platform == 'win32'",
     "matplotlib-inline",
-    "ipython",
-    "gurobipy",
 ]
 
 [project.urls]
@@ -54,6 +51,7 @@ Issues = "https://github.com/jchliao/visioplot/issues"
 
 [dependency-groups]
 dev = [
+    "numpy",
     "pytest",
 ]
 
