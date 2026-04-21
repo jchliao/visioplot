@@ -1,144 +1,6 @@
-import copy
-import io
-from pathlib import Path
 import re
 from bs4 import BeautifulSoup, Tag
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.pyplot import gcf
-from visioplot.visiolib import VisioExporter
-
-
-class Fig:
-    def __init__(self, fig):
-        self.fig: Figure = copy.deepcopy(fig)
-
-    def savefig(self, *args, **kwargs) -> VisioExporter:
-        kwargs["format"] = "svg"
-        fig = self.fig
-        ax = fig.get_axes()[0]
-
-        # 第一次渲染并解析 (主图)
-        svg_buffer = io.BytesIO()
-        fig.savefig(svg_buffer, **kwargs)
-        svg_buffer.seek(0)
-        main_soup = BeautifulSoup(svg_buffer.read(), "xml")
-
-        # 传入对象，直接进行原位修改，返回标志位
-        flag_out = _svg_windows(main_soup)
-
-        if flag_out:
-            bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            ax.set_axis_off()
-            legend = ax.get_legend()
-            if legend:
-                legend.remove()
-            kwargs["bbox_inches"] = bbox
-            svg_buffer = io.BytesIO()
-            fig.savefig(svg_buffer, **kwargs)
-            svg_buffer.seek(0)
-            sub_soup = BeautifulSoup(svg_buffer.read(), "xml")
-            _svg_content(sub_soup)
-            # 将数据层节点合并到主图中 (直接在对象间操作)
-            _combined_svg(main_soup, sub_soup)
-
-        # 修改坐标轴统一清理
-        modify_axis(main_soup)
-        modify_path_extend_clip(main_soup)
-        _svg_clean(main_soup)
-
-        plt.close(fig)
-        fname = Path(args[0]).with_suffix(".svg")
-        with open(fname, "w", encoding="utf-8") as file:
-            file.write(main_soup.prettify())
-
-        return VisioExporter(fname)
-
-
-def savefig(*args, **kwargs) -> VisioExporter:
-    fig = gcf()
-    return Fig(fig).savefig(*args, **kwargs)
-
-
-# 所有的辅助函数现在直接接收 BeautifulSoup 对象，并在原位(in-place)修改
-def _svg_clean(soup: BeautifulSoup):
-    for useless_tag in soup.find_all(["metadata", "style", "clipPath"]):
-        useless_tag.decompose()
-    for tag_with_clip in soup.find_all(attrs={"clip-path": True}):
-        del tag_with_clip["clip-path"]
-    for g_tag in reversed(soup.find_all("g")):
-        g_id = g_tag.get("id") or ""
-        if g_id == "ax" or g_id == "line-id" or g_id in AXIS_ID_LIST:
-            continue
-        has_relevant_id = any(k in g_id for k in ["legend", "figure", "axes"])
-        has_single_child = len(g_tag.find_all(recursive=False)) <= 1
-        if has_relevant_id or has_single_child:
-            g_tag.unwrap()
-    for tag in reversed(soup.find_all(["g", "defs"])):
-        if not tag.find() and not tag.get_text(strip=True):
-            tag.decompose()
-
-
-def _svg_windows(soup: BeautifulSoup):
-    flag_out = False
-    for g_tag in soup.find_all("g", id="out"):
-        defs_tag = Tag(name="defs")
-        for path_tag in g_tag.find_all("path"):
-            if path_tag.get("id") is not None:
-                path_tag_tmp = path_tag.copy_self()
-                defs_tag.append(path_tag_tmp)
-                break
-        g_tag.replace_with(defs_tag)
-        flag_out = True
-    return flag_out
-
-
-def _svg_content(soup: BeautifulSoup):
-    svg_root = soup.find("svg")
-    if svg_root is None:
-        return
-    viewbox_attr = svg_root.get("viewBox") or "0 0 0 0"
-    viewbox = str(viewbox_attr).split()
-    width = float(viewbox[2])
-    height = float(viewbox[3])
-    out_elements = soup.find_all("g", id="out")
-    out_point_defs_id = []
-    svg_root.clear()
-
-    if len(out_elements) == 0:
-        return
-
-    for out_element in out_elements:
-        for path_tag in out_element.find_all("path"):
-            if path_tag.get("clip-path") is not None:
-                modify_line_path(path_tag)
-            out_point_defs_id.append(path_tag.get("id", ""))
-
-        all_g = out_element.find_all("g")
-        for g_tag in all_g:
-            if g_tag.get("clip-path") is not None:
-                for use_tag in g_tag.find_all("use"):
-                    x = float(str(use_tag.get("x") or 0))
-                    y = float(str(use_tag.get("y") or 0))
-                    if x < 0 or x > width or y < 0 or y > height:
-                        use_tag.decompose()
-
-    ax_group = soup.new_tag("g", id="ax")
-    for out_element in out_elements:
-        ax_group.append(out_element.extract())
-    svg_root.append(ax_group)
-
-
-def _combined_svg(main_soup: BeautifulSoup, sub_soup: BeautifulSoup):
-    cp_tag = main_soup.find("clipPath")
-    rect_tag = cp_tag.find("rect") if cp_tag else None
-    ax_tag = sub_soup.find("g", id="ax")
-    axes_tag = main_soup.find("g", id="axes_1")
-    if rect_tag and ax_tag and axes_tag:
-        rect_x = rect_tag.get("x") or "0"
-        rect_y = rect_tag.get("y") or "0"
-        ax_tag["transform"] = f"translate({rect_x}, {rect_y})"
-        axes_tag.insert(2, ax_tag.extract())
+from math import hypot
 
 
 def modify_line_path(path: Tag):
@@ -217,26 +79,7 @@ def modify_axis(soup: BeautifulSoup):
             modify_line_path(path)
 
 
-def get_path_category(d_attr: str):
-    """
-    分类函数：
-    1: ML  + 整数 -> 直线
-    2: ML  + 小数 -> 星号
-    3: MCz + 小数 -> 点圆
-    """
-    d_attr = d_attr[0:100]  # 只看前100字符
-    # 第一步：只要包含曲线，直接返回 3
-    if "C" in d_attr:
-        return 3
-    # 匹配规则：带小数点，直接返回 2
-    if "." in d_attr:
-        return 2
-    # 第三步：没有小数、没有曲线 → 纯整数直线 → 返回 1
-    return 1
-
-
 def clip_line_to_square(x1, y1, x2, y2, size=73):
-    # 移除默认参数，简化判断
     if x1 == x2 and y1 == y2:
         return []
     points = []
@@ -265,81 +108,170 @@ def clip_line_to_square(x1, y1, x2, y2, size=73):
         x = (size - b) / k
         if 0 <= x <= size:
             points.append((x, size))
-
-    # 简化去重逻辑，无排序+快速判断
     if len(points) < 2:
         return []
     return [points[0], points[-1]]
 
 
+def parse_path(d):
+    """
+    解析并识别 ring, circle, line, star。
+    特别逻辑：识别连续的两个 circle 是否组成 ring。
+    """
+    path_list = []
+    segments = [p for p in d.split("M")]
+    for s in segments:
+        if not s:
+            continue
+        l_count = 0
+        has_c = False
+        for ch in s:
+            if ch == "L":
+                l_count += 1
+                if l_count > 1:
+                    break  # 提前结束
+            elif ch == "C":
+                has_c = True
+                break  # 直接判 circle，无需再扫
+        if has_c:
+            name = "circle"
+            s = "M" + s
+        elif l_count == 1:
+            name = "line"
+            s = "M" + s
+        else:
+            name = "star"
+            s = "M" + s + "z"
+        path_list.append({"name": name, "str": s.strip()})
+
+    raw_elements = []
+    for s in path_list:
+        if s["name"] == "circle":
+            coords = [float(x) for x in re.findall(r"[-+]?\d*\.?\d+", s["str"])]
+            xs, ys = coords[0::2], coords[1::2]
+            if xs and ys:
+                cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+                r = (max(xs) - min(xs)) / 2
+                raw_elements.append({"name": "circle", "center": (cx, cy), "r": r})
+        elif s["name"] == "line":
+            coords = [float(x) for x in re.findall(r"[-+]?\d*\.?\d+", s["str"])]
+            raw_elements.append({"name": "line", "coords": coords[:4]})
+        else:
+            raw_elements.append({"name": "star", "str": s["str"]})
+
+    # 2. 识别连续的环 (Ring)
+    final_list = []
+    i = 0
+    while i < len(raw_elements):
+        curr = raw_elements[i]
+        # 如果当前和下一个都是 circle，检查是否成环
+        if (
+            i + 1 < len(raw_elements)
+            and curr["name"] == "circle"
+            and raw_elements[i + 1]["name"] == "circle"
+        ):
+            next_el = raw_elements[i + 1]
+            success, ring_data = is_ring(
+                curr["center"], curr["r"], next_el["center"], next_el["r"]
+            )
+            if success:
+                final_list.append({"name": "ring", "data": ring_data})
+                i += 2  # 跳过已合并的两个圆
+                continue
+        final_list.append(curr)
+        i += 1
+    return final_list
+
+
+def is_ring(c1, r1, c2, r2, eps=1e-2):
+    """判断两个圆是否构成环，返回 (bool, data)"""
+    # 计算圆心之间的距离
+    center_dist = hypot(c1[0] - c2[0], c1[1] - c2[1])
+    if center_dist > eps:
+        return False, None  # 如果圆心距离较大，则不是环
+    # 判断半径是否差异较小
+    if abs(r1 - r2) < eps:
+        return False, None  # 半径差异不明显，则不是环
+    # 计算外圆和内圆的半径
+    r_big = max(r1, r2)
+    r_small = min(r1, r2)
+    # 判断圆是否满足环的条件（同心且一个圆包含另一个圆）
+    if center_dist + r_small <= r_big + eps:
+        r_mid = 0.5 * (r1 + r2)  # 取中间半径
+        line_width = abs(r1 - r2)  # 计算线宽
+        return True, {"center": c1, "r_outer": r_mid, "line_width": line_width}
+    return False, None
+
+
 def modify_path_extend_clip(soup: BeautifulSoup):
+
     for path in soup.select('pattern[patternUnits="userSpaceOnUse"] path'):
-        # --- 1. 获取基础数据 ---
         d_attr = str(path.get("d", ""))
         style_attr = str(path.get("style", ""))
 
-        # 提取当前 path 下所有的数字坐标
-        all_coords = list(map(float, re.findall(r"[-+]?\d*\.?\d+", d_attr)))
-        if not all_coords:
-            continue
-        f = all_coords
+        elements = parse_path(d_attr)
 
-        # 预处理 style：修改 linecap
-        style_attr = style_attr.replace(
-            "stroke-linecap: butt", "stroke-linecap: square"
-        )
+        # 初始化容器
+        g_tag_for_circles = soup.new_tag("g")
+        g_tag_for_circles["style"] = style_attr
 
-        category = get_path_category(d_attr)
+        has_circles = False
+        lines_d = []
+        stars_d = []
 
-        # 类别 1: 线段逻辑
-        if category == 1:
-            new_d = []
-            for i in range(0, len(f) - 3, 4):
-                if clipped := clip_line_to_square(f[i], f[i + 1], f[i + 2], f[i + 3]):
-                    (nx1, ny1), (nx2, ny2) = clipped
-                    new_d.append(f"M {nx1:.3f} {ny1:.3f} L {nx2:.3f} {ny2:.3f}")
-            if new_d:
-                path["d"] = " ".join(new_d)
-                # 清洗 style 里的 fill 并设置 fill 属性
-                path["style"] = re.sub(r"fill\s*:\s*[^;]+;?", "", style_attr).strip()
-                path["fill"] = "none"
-            continue
+        for el in elements:
+            # --- 1. 处理圆/环 (放入 G 标签) ---
+            if el["name"] == "ring":
+                data = el["data"]
+                r_tag = soup.new_tag("circle")
+                r_tag["cx"] = f"{data['center'][0]:.3f}"
+                r_tag["cy"] = f"{data['center'][1]:.3f}"
+                r_tag["r"] = f"{data['r_outer']:.3f}"
+                r_tag["fill"] = "none"
+                g_tag_for_circles.append(r_tag)
+                has_circles = True
 
-        # 3: 圆圈替换 + G 标签包裹
-        elif category == 3:
-            sub_paths = re.findall(r"(M[^Mz]+z)", d_attr)
-            unique_circles = {}
-            for sub_d in sub_paths:
-                sub_f = list(map(float, re.findall(r"[-+]?\d*\.?\d+", sub_d)))
-                if not sub_f:
-                    continue
-                sub_xs, sub_ys = sub_f[0::2], sub_f[1::2]
-                rel_cx = (min(sub_xs) + max(sub_xs)) / 2
-                rel_cy = (min(sub_ys) + max(sub_ys)) / 2
-                r = max(max(sub_xs) - min(sub_xs), max(sub_ys) - min(sub_ys)) / 2
-                key = (round(rel_cx, 2), round(rel_cy, 2))
-                if key not in unique_circles or r > unique_circles[key]:
-                    unique_circles[key] = r
-            if not unique_circles:
-                continue
-            # 创建 <g> 容器
-            g_tag = soup.new_tag("g")
+            elif el["name"] == "circle":
+                c_tag = soup.new_tag("circle")
+                c_tag["cx"] = f"{el['center'][0]:.3f}"
+                c_tag["cy"] = f"{el['center'][1]:.3f}"
+                c_tag["r"] = f"{el['r']:.3f}"
+                # c_tag["fill"] = original_fill
+                g_tag_for_circles.append(c_tag)
+                has_circles = True
 
-            # --- 提取并清洗通用样式到 g 标签 ---
-            # 移除 fill 声明，将 linecap 设为 round
-            clean_style = re.sub(r"fill\s*:\s*[^;]+;?", "", style_attr).strip()
-            clean_style = clean_style.replace(
-                "stroke-linecap: square", "stroke-linecap: round"
+            # --- 2. 收集直线 (准备独立 path) ---
+            elif el["name"] == "line":
+                coords = el["coords"]
+                if len(coords) >= 4:
+                    clipped = clip_line_to_square(
+                        coords[0], coords[1], coords[2], coords[3]
+                    )
+                    if clipped:
+                        (nx1, ny1), (nx2, ny2) = clipped[:2]
+                        lines_d.append(f"M {nx1:.3f} {ny1:.3f} L {nx2:.3f} {ny2:.3f}")
+
+            # --- 3. 收集星号 (留在原 path) ---
+            elif el["name"] == "star":
+                stars_d.append(el["str"])
+
+        # --- 插入逻辑 ---
+
+        # 如果有圆，插入 G 标签
+        if has_circles:
+            path.insert_before(g_tag_for_circles)
+
+        # 如果有直线，插入独立 path (带 style)
+        if lines_d:
+            l_path = soup.new_tag("path")
+            l_path["d"] = " ".join(lines_d)
+            l_path["style"] = style_attr.replace(
+                "stroke-linecap: butt", "stroke-linecap: square"
             )
-            if clean_style and not clean_style.endswith(";"):
-                clean_style += ";"
-            g_tag["style"] = clean_style
-            g_tag["fill"] = "none"
-            for (cx, cy), r in unique_circles.items():
-                c = soup.new_tag("circle")
-                c["cx"] = f"{cx:.3f}"
-                c["cy"] = f"{cy:.3f}"
-                c["r"] = f"{r:.3f}"
-                g_tag.append(c)
-            path.insert_before(g_tag)
+            path.insert_before(l_path)
+
+        # 处理原 path (星号保留)
+        if stars_d:
+            path["d"] = " ".join(stars_d)
+        else:
             path.decompose()
