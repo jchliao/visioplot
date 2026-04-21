@@ -3,7 +3,7 @@ from .debug_utils import set_debug
 from .svglib import Fig, savefig
 from .visiolib import VisioExporter
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 
 __all__ = [
