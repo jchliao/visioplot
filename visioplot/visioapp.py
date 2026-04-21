@@ -1,5 +1,6 @@
 import sys
 import os
+import atexit
 if sys.platform == "win32":
     import win32com.client as win32c
     import win32job
@@ -31,7 +32,7 @@ class VisioApp:
                 cls._job, win32job.JobObjectExtendedLimitInformation, info
             )
 
-        hwnd = visio.Application.WindowHandle32
+        hwnd = visio.WindowHandle32
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
 
         handle = win32api.OpenProcess(
@@ -53,9 +54,10 @@ class VisioApp:
             except Exception:
                 cls._instance = None
         visio = win32c.DispatchEx("Visio.Application")
+        visio.Visible = False
+        atexit.register(cls.quit)
         try:
             cls._bind_lifecycle(visio)
-            visio.Visible = False
         except Exception as e:
             visio.Visible = True
             error_print(f"Failed to bind Visio lifecycle: {e}")

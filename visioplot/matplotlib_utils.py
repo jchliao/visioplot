@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import matplotlib_inline
+
 
 DEFAULT_STYLE = {
     "font.family": ["Times New Roman", "SimSun"],
@@ -14,8 +14,18 @@ DEFAULT_STYLE = {
 def apply_style(style=None, *, inline_svg=True):
     """Apply the default plotting style or a custom style mapping."""
     if inline_svg:
-        matplotlib_inline.backend_inline.set_matplotlib_formats("svg")
-    plt.rcParams.update(DEFAULT_STYLE if style is None else style)
+        try:
+            from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+            set_matplotlib_formats("svg")
+        except Exception:
+            pass
+    if style is None:
+        plt.rcParams.update(DEFAULT_STYLE)
+    else:
+        final_style = DEFAULT_STYLE.copy()
+        final_style.update(style)
+        plt.rcParams.update(final_style)
 
 
 def reset_style():

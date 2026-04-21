@@ -135,16 +135,13 @@ class VisioExporter:
             return self
 
         visio = VisioApp.get()
-
+        visio.ScreenUpdating = False
+        visio.EventsEnabled = False
+        visio.DeferRecalc = True
+        visio.UndoEnabled = False
         try:
             document = visio.Documents.Open(str(self.svg_path))
             page = visio.ActivePage
-            visio.ScreenUpdating = False
-            visio.EventsEnabled = False
-            visio.DeferRecalc = True
-            visio.UndoEnabled = False
-            page.PageSheet.CellsU("DrawingScale").FormulaU = "1 mm"
-            page.PageSheet.CellsU("PageScale").FormulaU = "1 mm"
             try:
                 page.CreateSelection(
                     visSelTypeByType, visSelModeSkipSuper, visTypeSelGroup
@@ -159,10 +156,12 @@ class VisioExporter:
                     apply_script_formatting(sub_shape, txt)
                 adjust_text_width(sub_shape)
             modify_all_fill_patterns(document)
+            sheet = page.PageSheet
+            sheet.CellsU("DrawingScale").FormulaU = "1 mm"
+            sheet.CellsU("PageScale").FormulaU = "1 mm"
             visio.DeferRecalc = False
             visio.EventsEnabled = True
             visio.ScreenUpdating = True
-            visio.UndoEnabled = True
             self.safe_save(document, vsdx_path)
             if clipboard:
                 page.CreateSelection(visSelTypeAll).Copy()
