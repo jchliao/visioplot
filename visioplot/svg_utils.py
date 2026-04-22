@@ -2,6 +2,15 @@ import re
 from bs4 import BeautifulSoup, Tag
 from math import hypot
 
+AXIS_ID_LIST = [
+    "mpl_toolkits.axisartist.axis_artist_1",
+    "mpl_toolkits.axisartist.axis_artist_2",
+    "mpl_toolkits.axisartist.axis_artist_3",
+    "mpl_toolkits.axisartist.axis_artist_4",
+]
+
+PROTECTED_TAGS = {"inax", "line-id"} | set(AXIS_ID_LIST)
+
 
 def modify_line_path(path: Tag):
     target_path = path if path.name == "path" else path.find("path")
@@ -59,14 +68,6 @@ def modify_line_path(path: Tag):
         g.append(line)
 
     target_path.replace_with(g)
-
-
-AXIS_ID_LIST = [
-    "mpl_toolkits.axisartist.axis_artist_1",
-    "mpl_toolkits.axisartist.axis_artist_2",
-    "mpl_toolkits.axisartist.axis_artist_3",
-    "mpl_toolkits.axisartist.axis_artist_4",
-]
 
 
 def modify_axis(soup: BeautifulSoup):
@@ -280,10 +281,11 @@ def modify_path_extend_clip(soup: BeautifulSoup):
 def modify_mathtext(soup: BeautifulSoup):
     target_texts = soup.select('g[id*="text"] g[transform] text')
     for text_tag in target_texts:
+        wrapper_g = soup.new_tag("g")
         for tspan in text_tag.find_all("tspan", recursive=False):
             if style := tspan.get("style"):
                 tspan["style"] = str(style).replace("STIXGeneral", "Times New Roman")
             new_text = soup.new_tag("text")
             new_text.append(tspan.extract())
-            text_tag.insert_before(new_text)
-        text_tag.decompose()
+            wrapper_g.append(new_text)
+        text_tag.replace_with(wrapper_g)
