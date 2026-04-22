@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 import sys
 import array
 from visioplot.debug_utils import debug_print, error_print, warn_print
@@ -27,24 +26,28 @@ from visioplot.visconst import (
     visSelModeSkipSuper,
     visTypeSelGroup,
     visComplexItalic,
+    visComplexBold,
 )
 
 
-GREEK_PATTERN = re.compile(r"[α-ωΑ-Ω]")  # 匹配希腊字母（包括大写和小写）
+# GREEK_PATTERN = re.compile(r"[α-ωΑ-Ω]")  # 匹配希腊字母（包括大写和小写）
+# GREEK_SET = set("αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ")
+def is_greek(ch):
+    return (
+        0x0370 <= ord(ch) <= 0x03FF  # Greek & Coptic
+    )
 
 
 def apply_script_formatting(shape, text):
     chars = shape.Characters
     if not any(c in text for c in "*_^"):
-        if GREEK_PATTERN.search(text):
-            _apply_greek_formatting(chars, text, 0, force_italic=True)
+        _apply_greek_formatting(chars, text, 0, force_italic=True)
         return
     segments = parse_latex_like(text)
     shape.Text = "".join(seg[0] for seg in segments)
     pos = 0
     for seg_text, seg_pos, italic_flag, bold_flag in segments:
-        if GREEK_PATTERN.search(seg_text):
-            _apply_greek_formatting(chars, seg_text, pos)
+        has_greek = _apply_greek_formatting(chars, seg_text, pos)
         if seg_pos == visPosNormal and not italic_flag and not bold_flag:
             pos += len(seg_text)
             continue
@@ -54,22 +57,30 @@ def apply_script_formatting(shape, text):
         chars.CharProps(visCharacterPos, seg_pos)
         style = 0
         if italic_flag:
-            style |= visItalic + visComplexItalic
+            style |= visItalic
+            if has_greek:
+                style |= visComplexItalic
         if bold_flag:
             style |= visBold
+            if has_greek:
+                style |= visComplexBold
         chars.CharProps(visCharacterStyle, style)
         pos += length
 
 
 def _apply_greek_formatting(chars, text_segment, offset, force_italic=False):
+    has_greek = False
     for i, char in enumerate(text_segment):
-        if GREEK_PATTERN.match(char):
-            char_idx = offset + i
-            chars.Begin = char_idx
-            chars.End = char_idx + 1
-            chars.CharProps(visCharacterAsianFont, 0)
-            if force_italic:
-                chars.CharProps(visCharacterStyle, (visItalic + visComplexItalic))
+        if not is_greek(char):
+            continue
+        has_greek = True
+        char_idx = offset + i
+        chars.Begin = char_idx
+        chars.End = char_idx + 1
+        chars.CharProps(visCharacterAsianFont, 0)
+        if force_italic:
+            chars.CharProps(visCharacterStyle, visItalic | visComplexItalic)
+    return has_greek
 
 
 READ_CONFIG = [

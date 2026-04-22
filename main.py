@@ -45,7 +45,7 @@ def example3_text_markup_to_visio_clipboard():
     plt.xlabel("流量 q_**in** / (m^3/h)")
     plt.ylabel("压降 Δp / kPa")
     plt.title("泵特性曲线: H = H_0 - k q^2")
-    plt.text(20, 8.8, "η_{*pump*} = **0.86**")
+    plt.text(20, 8.8, "***η***_{*pump*} = **0.86**")
     plt.text(20, 7.9, "功率关系: P = ρ g q H")
     plt.tight_layout()
 
