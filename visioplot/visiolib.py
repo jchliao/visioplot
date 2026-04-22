@@ -26,7 +26,7 @@ from visioplot.visconst import (
     visSelTypeByType,
     visSelModeSkipSuper,
     visTypeSelGroup,
-    visWSMinimized,
+    visComplexItalic,
 )
 
 
@@ -34,18 +34,17 @@ GREEK_PATTERN = re.compile(r"[α-ωΑ-Ω]")  # 匹配希腊字母（包括大写
 
 
 def apply_script_formatting(shape, text):
-    segments = parse_latex_like(text)
-    plain_text = "".join(seg[0] for seg in segments)
-    shape.Text = plain_text
-    pos = 0
     chars = shape.Characters
+    if not any(c in text for c in "*_^"):
+        if GREEK_PATTERN.search(text):
+            _apply_greek_formatting(chars, text, 0, force_italic=True)
+        return
+    segments = parse_latex_like(text)
+    shape.Text = "".join(seg[0] for seg in segments)
+    pos = 0
     for seg_text, seg_pos, italic_flag, bold_flag in segments:
         if GREEK_PATTERN.search(seg_text):
-            for i, char in enumerate(seg_text):
-                if GREEK_PATTERN.match(char):
-                    chars.Begin = pos + i
-                    chars.End = pos + i + 1
-                    chars.CharProps(visCharacterAsianFont, 0)
+            _apply_greek_formatting(chars, seg_text, pos)
         if seg_pos == visPosNormal and not italic_flag and not bold_flag:
             pos += len(seg_text)
             continue
@@ -55,11 +54,22 @@ def apply_script_formatting(shape, text):
         chars.CharProps(visCharacterPos, seg_pos)
         style = 0
         if italic_flag:
-            style |= visItalic
+            style |= visItalic + visComplexItalic
         if bold_flag:
             style |= visBold
         chars.CharProps(visCharacterStyle, style)
         pos += length
+
+
+def _apply_greek_formatting(chars, text_segment, offset, force_italic=False):
+    for i, char in enumerate(text_segment):
+        if GREEK_PATTERN.match(char):
+            char_idx = offset + i
+            chars.Begin = char_idx
+            chars.End = char_idx + 1
+            chars.CharProps(visCharacterAsianFont, 0)
+            if force_italic:
+                chars.CharProps(visCharacterStyle, (visItalic + visComplexItalic))
 
 
 READ_CONFIG = [
@@ -152,8 +162,7 @@ class VisioExporter:
                 txt = sub_shape.Text
                 if not txt:
                     continue
-                if any(c in txt for c in "*_^"):
-                    apply_script_formatting(sub_shape, txt)
+                apply_script_formatting(sub_shape, txt)
                 adjust_text_width(sub_shape)
             modify_all_fill_patterns(document)
             sheet = page.PageSheet

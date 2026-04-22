@@ -10,6 +10,7 @@ from visioplot.svg_utils import (
     modify_line_path,
     modify_axis,
     modify_path_extend_clip,
+    modify_mathtext,
     AXIS_ID_LIST,
 )
 
@@ -50,6 +51,7 @@ class Fig:
         # 修改坐标轴统一清理
         modify_axis(main_soup)
         modify_path_extend_clip(main_soup)
+        modify_mathtext(main_soup)
         _svg_clean(main_soup)
 
         plt.close(fig)
@@ -67,7 +69,9 @@ def savefig(*args, **kwargs) -> VisioExporter:
 
 # 所有的辅助函数现在直接接收 BeautifulSoup 对象，并在原位(in-place)修改
 def _svg_clean(soup: BeautifulSoup):
-    for useless_tag in soup.find_all(["metadata", "style", "clipPath"]):
+    if style := soup.find("style"):
+        style.string = "path {stroke-linejoin:round;stroke-linecap:square}"
+    for useless_tag in soup.find_all(["metadata", "clipPath"]):
         useless_tag.decompose()
     for tag_with_clip in soup.find_all(attrs={"clip-path": True}):
         del tag_with_clip["clip-path"]
@@ -82,6 +86,12 @@ def _svg_clean(soup: BeautifulSoup):
     for tag in reversed(soup.find_all(["g", "defs"])):
         if not tag.find() and not tag.get_text(strip=True):
             tag.decompose()
+    for path_tag in soup.find_all("path", id=True):
+        if style := path_tag.get("style", ""):
+            style = f"{str(style).rstrip(';')}; stroke-linecap: butt"
+        else:
+            style = "stroke-linecap: butt"
+        path_tag["style"] = style
 
 
 def _svg_windows(soup: BeautifulSoup):

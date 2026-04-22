@@ -275,3 +275,15 @@ def modify_path_extend_clip(soup: BeautifulSoup):
             path["d"] = " ".join(stars_d)
         else:
             path.decompose()
+
+
+def modify_mathtext(soup: BeautifulSoup):
+    target_texts = soup.select('g[id*="text"] g[transform] text')
+    for text_tag in target_texts:
+        for tspan in text_tag.find_all("tspan", recursive=False):
+            if style := tspan.get("style"):
+                tspan["style"] = str(style).replace("STIXGeneral", "Times New Roman")
+            new_text = soup.new_tag("text")
+            new_text.append(tspan.extract())
+            text_tag.insert_before(new_text)
+        text_tag.decompose()
