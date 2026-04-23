@@ -89,8 +89,8 @@ vp.apply_style()
 plt.plot([1, 2, 3], [3, 5, 4], label="inax", marker="s")
 plt.plot([1, 2, 3], [5, 15, 3], gid="out", label="outax", linestyle="--", marker="o")
 plt.legend()
-plt.tight_layout()
-exporter = vp.savefig("demo.svg", bbox_inches="tight", pad_inches=0)
+plt.tight_layout(pad=0.2)
+exporter = vp.savefig("demo.svg")
 exporter.tovsd()   # 保存为 demo.vsdx
 exporter.toclip()  # 导出并复制到剪贴板
 ```

@@ -18,15 +18,20 @@ from visioplot.visconst import (
     visXFormPinY,
     visXFormLocPinX,
     visXFormWidth,
+    visXFormHeight,
     visSectionObject,
     visRowXFormOut,
     visSelTypeAll,
     visTypeGroup,
     visSelTypeByType,
-    visSelModeSkipSuper,
+    visSelModeOnlySuper,
+    visRowText,
+    visTxtBlkVerticalAlign,
+    visVertMiddle,
     visTypeSelGroup,
     visComplexItalic,
     visComplexBold,
+    visSpaceLine,
 )
 
 
@@ -86,6 +91,7 @@ def _apply_greek_formatting(chars, text_segment, offset, force_italic=False):
 READ_CONFIG = [
     [visSectionObject, visRowXFormOut, visXFormPinX],  # 获取 PinX
     [visSectionObject, visRowXFormOut, visXFormWidth],  # 获取 Width
+    # [visSectionObject, visRowXFormOut, visXFormHeight],  # 获取 Height
     [visSectionParagraph, visRowParagraph, visHorzAlign],  # 获取对齐方式
 ]
 READ_STREAM = array.array("h", sum(READ_CONFIG, []))
@@ -93,19 +99,41 @@ WRITE_CONFIG = [
     [visSectionObject, visRowXFormOut, visXFormPinX],  # PinX
     [visSectionObject, visRowXFormOut, visXFormLocPinX],  # LocPinX
     [visSectionObject, visRowXFormOut, visXFormWidth],  # Width
+    [visSectionObject, visRowXFormOut, visXFormHeight],  # Height
+    [visSectionObject, visRowText, visTxtBlkVerticalAlign],  # 垂直对齐方式
+    [visSectionParagraph, visRowParagraph, visSpaceLine],  # 行间距
 ]
 WRITE_STREAM = array.array("h", sum(WRITE_CONFIG, []))
-ALIGN_MAP = {"0": 0.0, "1": 0.5, "2": 1.0}
+ALIGN_MAP = {
+    "0": 0.0,
+    "1": 0.5,
+    "2": 1.0,
+}  # visHorzLeft=0, visHorzCenter=1, visHorzRight=2
 
 
-def adjust_text_width(shape):
+def eval_in(expr: str) -> str:
+    if " in" in expr:
+        result = eval(expr.replace(" in", ""))
+        return f"{result}"
+    return expr
+
+
+def fit_shape_to_text(shape):
     formulas = shape.GetFormulasU(READ_STREAM)
     old_pinx_f, old_width_f, align_f = formulas
     target = ALIGN_MAP.get(align_f, 0.5)
-    new_pinx_formula = f"{old_pinx_f} + {old_width_f}*{target - 0.5}"
+    new_pinx_formula = eval_in(f"{old_pinx_f} + {old_width_f}*{target - 0.5}")
     new_locpinx_formula = f"Width*{target}"
-    new_width_f = "GUARD(TEXTWIDTH(TheText))"
-    new_formulas = [new_pinx_formula, new_locpinx_formula, new_width_f]
+    new_width_f = "TEXTWIDTH(TheText)"
+    new_height_f = "TEXTHEIGHT(TheText, Width)"
+    new_formulas = [
+        new_pinx_formula,
+        new_locpinx_formula,
+        new_width_f,
+        new_height_f,
+        visVertMiddle,
+        "-100%",
+    ]
     shape.SetFormulas(WRITE_STREAM, new_formulas, 0)
 
 
@@ -123,6 +151,24 @@ def iter_shapes(parent):
             except Exception as e:
                 warn_print(f"Skip bad group: {e}")
                 continue
+
+
+def ungroup(page):
+    try:
+        page.CreateSelection(
+            visSelTypeByType, visSelModeOnlySuper, visTypeSelGroup
+        ).Ungroup()
+    except Exception:
+        pass
+
+
+def updatebox(page):
+    try:
+        page.CreateSelection(
+            visSelTypeByType, visSelModeOnlySuper, visTypeSelGroup
+        ).UpdateAlignmentBox()
+    except Exception:
+        pass
 
 
 class VisioExporter:
@@ -163,22 +209,19 @@ class VisioExporter:
         try:
             document = visio.Documents.Open(str(self.svg_path))
             page = visio.ActivePage
-            try:
-                page.CreateSelection(
-                    visSelTypeByType, visSelModeSkipSuper, visTypeSelGroup
-                ).Ungroup()
-            except Exception:
-                pass
+            ungroup(page)
+
             for sub_shape in iter_shapes(page):
                 txt = sub_shape.Text
                 if not txt:
                     continue
                 apply_script_formatting(sub_shape, txt)
-                adjust_text_width(sub_shape)
+                fit_shape_to_text(sub_shape)
             modify_all_fill_patterns(document)
             sheet = page.PageSheet
             sheet.CellsU("DrawingScale").FormulaU = "1 mm"
             sheet.CellsU("PageScale").FormulaU = "1 mm"
+            updatebox(page)
             visio.DeferRecalc = False
             visio.EventsEnabled = True
             visio.ScreenUpdating = True

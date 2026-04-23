@@ -21,7 +21,6 @@ def example1_axisartist_svg_only():
     print("example1 done: example1_axisartist.svg")
 
 
-
 def example2_fig_object_svg_only():
     """示例2：通过 Fig(fig).savefig 导出 SVG。"""
     fig = plt.figure(figsize=vp.cm(9, 6.75))
@@ -32,7 +31,6 @@ def example2_fig_object_svg_only():
     ax.legend()
     vp.Fig(fig).savefig("example2_fig.svg")
     print("example2 done: example2_fig.svg")
-
 
 
 def example3_text_markup_to_visio_clipboard():
@@ -47,13 +45,11 @@ def example3_text_markup_to_visio_clipboard():
     plt.title("泵特性曲线: H = H_0 - k q^2")
     plt.text(20, 8.8, "***η***_{*pump*} = **0.86**")
     plt.text(20, 7.9, "功率关系: P = ρ g q H")
-    plt.tight_layout()
-
-    exporter = vp.savefig(
-        "example3_formula_text.svg", bbox_inches="tight", pad_inches=0.1
-    )
+    plt.tight_layout(pad=0.2)
+    exporter = vp.savefig("example3_formula_text.svg")
     exporter.toclip()
-    print("example3 done: example3_formula_text.svg + clipboard")
+    print("example3 done: example3_formula_text + clipboard")
+    print("打开Word, 粘贴试一试。")
 
 
 def example4_parser_stress_to_visio_clipboard():
@@ -75,10 +71,10 @@ def example4_parser_stress_to_visio_clipboard():
         plt.text(x_pos, start_y - i * line_gap, text)
 
     plt.axis("off")
-    plt.tight_layout()
-    exporter = vp.savefig("example4_parser.svg", bbox_inches="tight", pad_inches=0.1)
-    exporter.toclip()
-    print("example4 done: example4_parser.svg + clipboard")
+    plt.tight_layout(pad=0.2)
+    exporter = vp.savefig("example4_parser.svg")
+    exporter.tovsd()
+    print("example4 done: example4_parser.vsdx")
 
 
 EXAMPLES = {
@@ -96,5 +92,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# %%
