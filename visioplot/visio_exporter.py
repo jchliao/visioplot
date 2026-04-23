@@ -2,9 +2,9 @@ from pathlib import Path
 import sys
 import array
 from visioplot.debug_utils import debug_print, error_print, warn_print
-from visioplot.parse_utils import parse_latex_like
-from visioplot.visioapp import VisioApp
-from visioplot.visconst import (
+from visioplot.parser import parse_latex_like
+from visioplot.visio_app import VisioApp
+from visioplot.constants import (
     visCharacterStyle,
     visCharacterPos,
     visBold,

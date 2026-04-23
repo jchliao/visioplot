@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import gcf
-from visioplot.visiolib import VisioExporter
+from visioplot.visio_exporter import VisioExporter
 from visioplot.svg_utils import (
     modify_line_path,
     modify_axis,

@@ -1,6 +1,6 @@
 import re
 from visioplot.debug_utils import debug_print
-from visioplot.visconst import visPosNormal, visPosSuper, visPosSub
+from visioplot.constants import visPosNormal, visPosSuper, visPosSub
 
 SUGAR_PATTERN = re.compile(r"([_^])(\*{1,3})(.*?)\2", flags=re.DOTALL)
 

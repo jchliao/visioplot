@@ -1,7 +1,7 @@
 from .matplotlib_utils import apply_style, cm, reset_style
 from .debug_utils import set_debug
-from .svglib import Fig, savefig
-from .visiolib import VisioExporter
+from .svg_exporter import Fig, savefig
+from .visio_exporter import VisioExporter
 
 __version__ = "1.2.2"
 
