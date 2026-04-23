@@ -175,6 +175,11 @@ class VisioExporter:
     def __init__(self, svg_path):
         self.svg_path = Path(svg_path).resolve()
 
+    def _repr_svg_(self):
+        """Jupyter 自动调用：当对象作为 Cell 最后一行返回时展示 SVG"""
+        with open(self.svg_path, "r", encoding="utf-8") as f:
+            return f.read()
+
     def safe_save(self, document, vsdx_path):
         target = Path(vsdx_path or self.svg_path)
         vsdx_path = target.with_suffix(".vsdx").resolve()

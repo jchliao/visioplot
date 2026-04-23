@@ -53,7 +53,7 @@ def apply_style(style=None, *, inline_svg=True):
         try:
             from matplotlib_inline.backend_inline import set_matplotlib_formats
 
-            set_matplotlib_formats("retina")
+            set_matplotlib_formats("svg")
         except Exception:
             pass
     if style is None:
