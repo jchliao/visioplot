@@ -5,7 +5,7 @@ from .visio_exporter import VisioExporter
 from matplotlib._mathtext import UnicodeFonts
 from .matplotlib_patch import mathtext_fallback_decorator
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 
 __all__ = [
