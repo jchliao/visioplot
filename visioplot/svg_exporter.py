@@ -16,8 +16,8 @@ from visioplot.svg_utils import (
 
 
 class Fig:
-    def __init__(self, fig):
-        self.fig: Figure = copy.deepcopy(fig)
+    def __init__(self, fig: Figure):
+        self.fig = fig
 
     def savefig(self, *args, **kwargs) -> VisioExporter:
         kwargs["format"] = "svg"
@@ -54,12 +54,16 @@ def savefig(*args, **kwargs) -> VisioExporter:
 
 
 def _fig_add(main_soup, fig, kwargs):
-    for i, ax in enumerate(fig.get_axes()):
-        bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig = copy.deepcopy(fig)
+    kwargs = kwargs.copy()
+    bboxs = []
+    for ax in fig.get_axes():
+        bboxs.append(ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted()))
         ax.set_axis_off()
         if legend := ax.get_legend():
             legend.remove()
-        kwargs["bbox_inches"] = bbox
+    for i, ax in enumerate(fig.get_axes()):
+        kwargs["bbox_inches"] = bboxs[i]
         svg_buffer = io.BytesIO()
         fig.savefig(svg_buffer, **kwargs)
         svg_buffer.seek(0)
@@ -67,6 +71,7 @@ def _fig_add(main_soup, fig, kwargs):
         _svg_content(sub_soup)
         # 将数据层节点合并到主图中 (直接在对象间操作)
         _combined_svg(main_soup, sub_soup, i)
+    plt.close(fig)
 
 
 # 所有的辅助函数现在直接接收 BeautifulSoup 对象，并在原位(in-place)修改
