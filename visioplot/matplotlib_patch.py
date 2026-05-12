@@ -1,18 +1,13 @@
 import functools
 import logging
-import matplotlib as mpl
 from matplotlib.font_manager import FontProperties, get_font, fontManager
 from matplotlib._mathtext import get_unicode_index
 
 
-def _patch_fallback(uniindex: int):
-    """补丁逻辑：在系统字体中寻找缺失字符"""
-    families = mpl.rcParams.get("font.family", [])
-    if isinstance(families, str):
-        families = [families]
-
-    search_list = families + mpl.rcParams.get("font.sans-serif", [])
-
+def _patch_fallback(self, uniindex: int):
+    """补丁逻辑：在用户指定的字体族列表中寻找缺失字符"""
+    families = self.default_font_prop.get_family()
+    search_list = families[1:]
     for fam in search_list:
         try:
             prop = FontProperties(family=fam)
@@ -31,10 +26,10 @@ def mathtext_fallback_decorator(func):
         level = logging.getLogger("matplotlib.mathtext").getEffectiveLevel()
         logging.getLogger("matplotlib.mathtext").setLevel(logging.ERROR)
         font, uniindex, slanted = func(self, fontname, font_class, sym)
+        logging.getLogger("matplotlib.mathtext").setLevel(level)
         if uniindex == 0xA4:
             real_uni = get_unicode_index(sym)
-            logging.getLogger("matplotlib.mathtext").setLevel(level)
-            res = _patch_fallback(real_uni)
+            res = _patch_fallback(self, real_uni)
             if res:
                 return res
         return font, uniindex, slanted
