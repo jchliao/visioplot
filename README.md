@@ -29,8 +29,39 @@ Visioplot 是一个面向科研绘图和工程汇报场景的 Python 工具库�
 
 ## 安装
 
+你可以使用 `pip` 或 `conda` / `mamba` 安装 `visioplot`。
+
+### 1. 使用 pip 安装
+
+在终端运行：
+
 ```bash
 pip install visioplot
+```
+
+### 2. 使用 Conda / Mamba 安装
+
+#### 配置 Conda 通道
+
+建议先将 `conda-forge` 设置为严格优先级，以减少依赖冲突。
+
+```bash
+conda config --add channels conda-forge
+conda config --set channel_priority strict
+```
+
+#### 安装 visioplot
+
+使用 Conda：
+
+```bash
+conda install visioplot
+```
+
+或使用 Mamba（推荐，依赖解析更快）：
+
+```bash
+mamba install visioplot
 ```
 
 ## 快速开始
